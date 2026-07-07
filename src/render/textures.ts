@@ -23,49 +23,57 @@ export function makeFaceTexture(bodyColor: number): THREE.CanvasTexture {
   g.fillRect(0, 0, s, s);
 
   const cx = s / 2;
-  const eyeY = s * 0.42;
-  const eyeDx = s * 0.17;
-  const eyeR = s * 0.12;
+  const eyeY = s * 0.44;
+  const eyeDx = s * 0.19;
+  const eyeR = s * 0.16;
 
   // Rosy cheeks.
-  g.fillStyle = 'rgba(255,120,150,0.35)';
+  g.fillStyle = 'rgba(255,110,150,0.45)';
   g.beginPath();
-  g.arc(cx - eyeDx * 1.5, eyeY + eyeR * 1.4, eyeR * 0.7, 0, Math.PI * 2);
-  g.arc(cx + eyeDx * 1.5, eyeY + eyeR * 1.4, eyeR * 0.7, 0, Math.PI * 2);
+  g.arc(cx - eyeDx * 1.5, eyeY + eyeR * 1.5, eyeR * 0.75, 0, Math.PI * 2);
+  g.arc(cx + eyeDx * 1.5, eyeY + eyeR * 1.5, eyeR * 0.75, 0, Math.PI * 2);
   g.fill();
 
-  // Googly eye whites.
+  // Googly eye whites (dark outline so they pop on any pastel body).
+  g.lineWidth = s * 0.03;
+  g.strokeStyle = '#1c1d24';
   g.fillStyle = '#ffffff';
   g.beginPath();
   g.arc(cx - eyeDx, eyeY, eyeR, 0, Math.PI * 2);
-  g.arc(cx + eyeDx, eyeY, eyeR, 0, Math.PI * 2);
-  g.fill();
-
-  // Pupils (slightly offset for that googly charm).
-  g.fillStyle = '#22232a';
+  g.fill(); g.stroke();
   g.beginPath();
-  g.arc(cx - eyeDx + eyeR * 0.25, eyeY + eyeR * 0.2, eyeR * 0.5, 0, Math.PI * 2);
-  g.arc(cx + eyeDx + eyeR * 0.25, eyeY + eyeR * 0.2, eyeR * 0.5, 0, Math.PI * 2);
+  g.arc(cx + eyeDx, eyeY, eyeR, 0, Math.PI * 2);
+  g.fill(); g.stroke();
+
+  // Big friendly pupils.
+  g.fillStyle = '#1c1d24';
+  g.beginPath();
+  g.arc(cx - eyeDx + eyeR * 0.18, eyeY + eyeR * 0.15, eyeR * 0.62, 0, Math.PI * 2);
+  g.arc(cx + eyeDx + eyeR * 0.18, eyeY + eyeR * 0.15, eyeR * 0.62, 0, Math.PI * 2);
   g.fill();
 
   // Eye glints.
   g.fillStyle = '#ffffff';
   g.beginPath();
-  g.arc(cx - eyeDx + eyeR * 0.05, eyeY - eyeR * 0.05, eyeR * 0.16, 0, Math.PI * 2);
-  g.arc(cx + eyeDx + eyeR * 0.05, eyeY - eyeR * 0.05, eyeR * 0.16, 0, Math.PI * 2);
+  g.arc(cx - eyeDx - eyeR * 0.05, eyeY - eyeR * 0.15, eyeR * 0.22, 0, Math.PI * 2);
+  g.arc(cx + eyeDx - eyeR * 0.05, eyeY - eyeR * 0.15, eyeR * 0.22, 0, Math.PI * 2);
   g.fill();
 
   // Smile.
-  g.strokeStyle = '#22232a';
-  g.lineWidth = s * 0.035;
+  g.strokeStyle = '#1c1d24';
+  g.lineWidth = s * 0.045;
   g.lineCap = 'round';
   g.beginPath();
-  g.arc(cx, s * 0.6, s * 0.12, Math.PI * 0.15, Math.PI * 0.85);
+  g.arc(cx, s * 0.64, s * 0.15, Math.PI * 0.12, Math.PI * 0.88);
   g.stroke();
 
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 1;
+  // Keep the little face crisp at small on-screen sizes (avoid mip blur).
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
   return tex;
 }
 

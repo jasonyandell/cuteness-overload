@@ -79,7 +79,8 @@ export class GameRenderer {
 
   // Camera framing.
   private target = new THREE.Vector3();
-  private frameRadius = 10;
+  private bboxMin = new THREE.Vector3();
+  private bboxMax = new THREE.Vector3();
   private readonly elevation = (52 * Math.PI) / 180;
 
   // Picking.
@@ -91,6 +92,7 @@ export class GameRenderer {
   private tmpColor = new THREE.Color();
   private tmpVec2 = new THREE.Vector2();
   private tmpVec3 = new THREE.Vector3();
+  private tmpCorner = new THREE.Vector3();
   private enemyPosById = new Map<number, { x: number; z: number }>();
   private towerPosById = new Map<number, { x: number; z: number }>();
   private homeWorld = { x: 0, z: 0 };
@@ -166,7 +168,15 @@ export class GameRenderer {
   private buildEnemyMesh(kind: EnemyKind, geo: THREE.BufferGeometry, y: number, radius: number): EnemyMesh {
     const tex = makeFaceTexture(C.ENEMY_COLOR[kind]);
     this.faceTextures.push(tex);
-    const mat = new THREE.MeshLambertMaterial({ map: tex });
+    // emissiveMap = same face texture so the body colour + face glow even in
+    // shadow: enemies read as bright pastels with visible faces regardless of
+    // lighting angle, and can never render as dark/black silhouettes.
+    const mat = new THREE.MeshLambertMaterial({
+      map: tex,
+      emissiveMap: tex,
+      emissive: 0xffffff,
+      emissiveIntensity: 0.55,
+    });
     const mesh = new THREE.InstancedMesh(geo, mat, ENEMY_CAP);
     mesh.count = 0;
     mesh.frustumCulled = false;
@@ -234,9 +244,12 @@ export class GameRenderer {
     if (this.terrain.instanceColor) this.terrain.instanceColor.needsUpdate = true;
     this.scene.add(this.terrain);
 
-    // Camera framing from map bounds.
-    this.target.set((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
-    this.frameRadius = 0.5 * Math.hypot(maxX - minX, maxZ - minZ) + HEX_SIZE * 1.5;
+    // Camera framing from map bounds (include a little vertical headroom for
+    // houses / towers so nothing clips at the top edge).
+    const pad = HEX_SIZE * 0.6;
+    this.bboxMin.set(minX - pad, -HEX_H, minZ - pad);
+    this.bboxMax.set(maxX + pad, 1.8, maxZ + pad);
+    this.target.set((minX + maxX) / 2, 0.2, (minZ + maxZ) / 2);
     this.frameCamera();
 
     this.hoverIndex = -1;
@@ -472,8 +485,10 @@ export class GameRenderer {
       const squash = 1 + wob * 0.06;
       const scale = em.radius * (0.72 + 0.28 * hpFrac);
 
+      // Keep the cute face toward the camera (which looks along -z); a gentle
+      // wobble instead of a full spin so the eyes stay readable.
       this.dummy.position.set(e.x, em.y + bob + scale * 0.02, e.z);
-      this.dummy.rotation.set(0, state.time * 0.6 + e.id, 0);
+      this.dummy.rotation.set(0, Math.sin(state.time * 2.2 + e.id) * 0.28, wob * 0.12);
       this.dummy.scale.set(scale / em.radius, (scale / em.radius) * squash, scale / em.radius);
       this.dummy.updateMatrix();
       em.mesh.setMatrixAt(idx, this.dummy.matrix);
@@ -579,28 +594,53 @@ export class GameRenderer {
   private frameCamera(): void {
     const w = this.canvas.clientWidth || this.canvas.width || 1;
     const h = this.canvas.clientHeight || this.canvas.height || 1;
-    const aspect = w / h;
-    this.camera.aspect = aspect;
+    this.camera.aspect = w / h;
 
-    const vHalf = (this.camera.fov * Math.PI) / 180 / 2;
-    const hHalf = Math.atan(Math.tan(vHalf) * aspect);
-    const distV = this.frameRadius / Math.sin(vHalf);
-    const distH = this.frameRadius / Math.sin(hHalf);
-    const dist = Math.max(distV, distH) * 1.12;
-
+    // Fixed viewing direction (no orbit); solve for the closest distance that
+    // keeps the whole map AABB inside the viewport with a small margin. A
+    // numeric fit against the real corners fills the frame far better than a
+    // bounding-sphere estimate, especially for long/diagonal maps.
     const dir = this.tmpVec3.set(0, Math.sin(this.elevation), Math.cos(this.elevation));
-    this.camera.position.set(
-      this.target.x + dir.x * dist,
-      this.target.y + dir.y * dist,
-      this.target.z + dir.z * dist,
-    );
-    this.camera.lookAt(this.target);
-    this.camera.far = dist * 2 + 100;
-    this.camera.updateProjectionMatrix();
+    const mn = this.bboxMin, mx = this.bboxMax;
+
+    const fits = (dist: number): boolean => {
+      this.camera.position.set(
+        this.target.x + dir.x * dist,
+        this.target.y + dir.y * dist,
+        this.target.z + dir.z * dist,
+      );
+      this.camera.lookAt(this.target);
+      this.camera.far = dist * 2 + 100;
+      this.camera.updateProjectionMatrix();
+      this.camera.updateMatrixWorld(true);
+      this.camera.matrixWorldInverse.copy(this.camera.matrixWorld).invert();
+      const limit = 0.94; // NDC margin
+      for (let cx = 0; cx < 2; cx++)
+        for (let cy = 0; cy < 2; cy++)
+          for (let cz = 0; cz < 2; cz++) {
+            this.tmpCorner
+              .set(cx ? mx.x : mn.x, cy ? mx.y : mn.y, cz ? mx.z : mn.z)
+              .project(this.camera);
+            if (Math.abs(this.tmpCorner.x) > limit || Math.abs(this.tmpCorner.y) > limit) return false;
+          }
+      return true;
+    };
+
+    const span = Math.hypot(mx.x - mn.x, mx.z - mn.z) + 2;
+    let lo = span * 0.15;
+    let hi = span * 4;
+    if (!fits(hi)) hi *= 3;
+    for (let i = 0; i < 26; i++) {
+      const mid = (lo + hi) / 2;
+      if (fits(mid)) hi = mid;
+      else lo = mid;
+    }
+    fits(hi); // leave camera at the fitting distance
 
     if (this.scene.fog instanceof THREE.Fog) {
-      this.scene.fog.near = dist * 0.55;
-      this.scene.fog.far = dist * 2.1;
+      const dist = hi;
+      this.scene.fog.near = dist * 0.7;
+      this.scene.fog.far = dist * 2.4;
     }
   }
 
