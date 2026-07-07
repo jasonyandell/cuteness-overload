@@ -24,7 +24,11 @@ Each game sims in ~15–25 ms; the full 30-game sweep finishes in well under a s
 
 ---
 
-## Result at the CURRENT constants (nothing changed)
+## Result at the ORIGINAL constants (historical — before the recommended changes were applied)
+
+> NOTE: the recommended changes below (doom rate 0.26, Double income 1.8 / hp 1.1) have
+> since been applied to `src/sim/` — the live game matches the "projected" table, verified
+> by re-running `npx tsx scripts/balance.ts`. This section is kept as the historical record.
 
 ```
 map      strat      wins  avgWave  avgLives  minLives

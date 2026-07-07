@@ -24,7 +24,7 @@ Hexagonal-grid 3D tower defense. Cute geometric enemies march set paths to destr
 - Upgrades: damage & attack speed, 5 levels each, per tower. Sell refunds 70%.
 - Lose life per leak (boss = 5). 0 lives = lost. Survive wave 20 (all dead, queue empty) = won → offer endless.
 - Shield enemies: shield pool absorbs damage first, regenerates after 2.5s unhit.
-- Freeze slows (splash pulse), cannon splashes, lightning chains (falloff), doom = huge slow AoE.
+- Freeze slows (splash pulse), cannon splashes, lightning chains (falloff), doom = huge AoE, slow-firing (no slow effect — freeze owns slows).
 - Hits are **instant (hitscan)** in sim at fire time; renderer animates projectiles cosmetically from events.
 
 ## Determinism & save
@@ -38,4 +38,4 @@ Format: `MapDef` in types.ts. ~11×9 hexes. Map 1 "Meadow Lane": single snaking 
 Headless Node (tsx). Simple "saver" strategy: greedy but patient — maintains a shopping list (next tower or next upgrade by simple priority), only buys when affordable, skips waves when total enemy hp on field is low relative to estimated DPS. It should WIN by saving for big purchases; a naive "spend immediately on plinkers" baseline should LOSE around wave 10-14. `scripts/balance.ts` runs both strategies across all 3 maps × several seeds and prints a table.
 
 ## Theme
-Pastel, soft, adorable. Enemies are cute 3D primitives (cube=Bloop, tetrahedron=Zippy, octahedron=Shelly w/ shield bubble, big icosahedron=Chonk) with googly-eye texture/sprites if cheap. Home is a tiny house. Low-poly, bright, MeshLambert/Toon, one directional + ambient light, no shadows on mobile (or cheap blob shadows). Target 60fps on mid phones: instanced meshes for hexes & enemies, pooled effect sprites, pixelRatio capped at 2, antialias off on small screens.
+Kid-toy bold: crayon primary colors (Duplo/Toca Boca), big chunky shapes, squash-and-stretch bounce everywhere. Enemies are cute 3D primitives (cube=Bloop, tetrahedron=Zippy, octahedron=Shelly w/ shield bubble, big icosahedron=Chonk) with googly-eye texture/sprites if cheap. Home is a tiny house. Low-poly, bright, MeshLambert/Toon, one directional + ambient light, no shadows on mobile (or cheap blob shadows). Target 60fps on mid phones: instanced meshes for hexes & enemies, pooled effect sprites, pixelRatio capped at 2, antialias off on small screens.

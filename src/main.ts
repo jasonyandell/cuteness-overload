@@ -106,6 +106,11 @@ class App {
   private panelUpdate: (() => void) | null = null;
 
   private ptrStart: PointerStart | null = null;
+  private ptrDown = false;
+  private panning = false;
+  private panLast = { x: 0, y: 0 };
+  private panDist = 0;
+  private static readonly PAN_THRESHOLD = 10; // px of movement before a press becomes a pan
 
   constructor() {
     this.root = document.getElementById('ui-root')!;
@@ -398,6 +403,7 @@ class App {
     this.closeTowerPanel();
     this.dismissOverlay();
     this.renderer.setMap(map);
+    this.renderer.resetPan();
     this.renderer.setHover(null, false);
     this.renderer.hideRange();
     this.menuMapId = map.id;
@@ -790,18 +796,48 @@ class App {
   // ---------------------------------------------------------------- input wiring
 
   private wireCanvas() {
-    this.canvas.addEventListener('pointermove', (e) => {
-      if (this.armed) this.updatePlacementPreview(e.clientX, e.clientY);
-    });
     this.canvas.addEventListener('pointerdown', (e) => {
+      this.ptrDown = true;
+      this.panning = false;
+      this.panDist = 0;
       this.ptrStart = { x: e.clientX, y: e.clientY, t: performance.now() };
+      this.panLast = { x: e.clientX, y: e.clientY };
       if (this.armed) this.updatePlacementPreview(e.clientX, e.clientY);
     });
+
+    this.canvas.addEventListener('pointermove', (e) => {
+      if (this.ptrDown) {
+        const dx = e.clientX - this.panLast.x;
+        const dy = e.clientY - this.panLast.y;
+        this.panLast = { x: e.clientX, y: e.clientY };
+        this.panDist += Math.hypot(dx, dy);
+        // once the finger/mouse has travelled far enough, this drag is a camera pan
+        if (!this.panning && this.panDist > App.PAN_THRESHOLD) {
+          this.panning = true;
+          this.renderer.setHover(null, false);
+          this.renderer.hideRange();
+        }
+        if (this.panning) {
+          this.renderer.panBy(dx, dy);
+        } else if (this.armed) {
+          this.updatePlacementPreview(e.clientX, e.clientY);
+        }
+      } else if (this.armed) {
+        // mouse hover with no button pressed keeps the placement preview live
+        this.updatePlacementPreview(e.clientX, e.clientY);
+      }
+    });
+
     this.canvas.addEventListener('pointerup', (e) => this.onPointerUp(e));
+    this.canvas.addEventListener('pointercancel', () => {
+      this.ptrDown = false;
+      this.panning = false;
+      this.ptrStart = null;
+    });
     this.canvas.addEventListener('pointerleave', () => {
-      if (this.armed) {
+      if (!this.ptrDown && this.armed) {
         this.renderer.setHover(null, false);
-        this.renderer.hideRange();
+        if (this.selectedTowerId === null) this.renderer.hideRange();
       }
     });
     this.canvas.addEventListener('contextmenu', (e) => {
@@ -811,21 +847,19 @@ class App {
   }
 
   private onPointerUp(e: PointerEvent) {
-    if (!this.state || this.state.status !== 'playing') {
-      this.ptrStart = null;
-      return;
-    }
-    const start = this.ptrStart;
+    const wasPanning = this.panning;
+    this.ptrDown = false;
+    this.panning = false;
     this.ptrStart = null;
+
+    // a pan drag never places or selects
+    if (wasPanning) return;
+    if (!this.state || this.state.status !== 'playing') return;
 
     if (this.armed) {
       this.tryPlaceAt(e.clientX, e.clientY);
       return;
     }
-
-    // selection only counts as a tap (not a camera drag)
-    const moved = start ? Math.hypot(e.clientX - start.x, e.clientY - start.y) : 0;
-    if (moved > 16) return;
 
     const hex = this.renderer.pickHex(e.clientX, e.clientY);
     if (hex) {

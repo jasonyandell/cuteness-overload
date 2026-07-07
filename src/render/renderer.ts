@@ -36,6 +36,8 @@ interface EnemyMesh {
   mesh: THREE.InstancedMesh;
   y: number; // resting height above ground
   radius: number; // base scale used for wobble
+  hopFreq: number; // springy walk cadence
+  hopHeight: number; // hop amplitude (world units)
 }
 
 interface HpBar {
@@ -78,10 +80,14 @@ export class GameRenderer {
   private rangeDisc: THREE.Mesh;
 
   // Camera framing.
-  private target = new THREE.Vector3();
+  private target = new THREE.Vector3(); // = baseTarget + panOffset (derived)
+  private baseTarget = new THREE.Vector3(); // map center
+  private panOffset = new THREE.Vector3(); // drag-pan offset on the ground
   private bboxMin = new THREE.Vector3();
   private bboxMax = new THREE.Vector3();
+  private camDist = 20; // current camera distance from target
   private readonly elevation = (52 * Math.PI) / 180;
+  private readonly zoomIn = 0.6; // <1 zooms in past the exact fit (map may overflow)
 
   // Picking.
   private raycaster = new THREE.Raycaster();
@@ -96,6 +102,8 @@ export class GameRenderer {
   private enemyPosById = new Map<number, { x: number; z: number }>();
   private towerPosById = new Map<number, { x: number; z: number }>();
   private homeWorld = { x: 0, z: 0 };
+  private spawnAt = new Map<number, number>(); // enemyId -> sim time it spawned (boing)
+  private fireAt = new Map<number, number>(); // towerId -> sim time it last fired (recoil pop)
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -129,15 +137,17 @@ export class GameRenderer {
     this.terrainMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
 
     // Enemy meshes, one InstancedMesh per kind with a baked cute face.
+    // Big, chunky preschool-toy proportions — overlap between neighbors is fine.
+    const box = new THREE.BoxGeometry(0.95, 0.95, 0.95);
     this.enemyMeshes = {
-      regular: this.buildEnemyMesh('regular', new THREE.BoxGeometry(0.55, 0.55, 0.55), 0.32, 0.55),
-      fast: this.buildEnemyMesh('fast', new THREE.TetrahedronGeometry(0.42), 0.30, 0.42),
-      shield: this.buildEnemyMesh('shield', new THREE.OctahedronGeometry(0.44), 0.42, 0.44),
-      boss: this.buildEnemyMesh('boss', new THREE.IcosahedronGeometry(0.8), 0.75, 0.8),
+      regular: this.buildEnemyMesh('regular', box, 0.5, 0.95, 6.5, 0.28),
+      fast: this.buildEnemyMesh('fast', new THREE.TetrahedronGeometry(0.75), 0.5, 0.75, 10, 0.36),
+      shield: this.buildEnemyMesh('shield', new THREE.OctahedronGeometry(0.8), 0.62, 0.8, 5.5, 0.22),
+      boss: this.buildEnemyMesh('boss', new THREE.IcosahedronGeometry(1.5), 1.15, 1.5, 3.2, 0.3),
     };
 
-    // Translucent shield bubbles (shared instanced sphere).
-    const bubbleGeo = new THREE.SphereGeometry(0.62, 12, 10);
+    // Translucent shield bubbles (shared instanced sphere) sized to wrap Shelly.
+    const bubbleGeo = new THREE.SphereGeometry(0.95, 14, 12);
     const bubbleMat = new THREE.MeshLambertMaterial({
       color: C.SHIELD_BUBBLE, transparent: true, opacity: 0.32, depthWrite: false,
     });
@@ -165,11 +175,14 @@ export class GameRenderer {
 
   // ---- construction helpers -------------------------------------------------
 
-  private buildEnemyMesh(kind: EnemyKind, geo: THREE.BufferGeometry, y: number, radius: number): EnemyMesh {
+  private buildEnemyMesh(
+    kind: EnemyKind, geo: THREE.BufferGeometry, y: number, radius: number,
+    hopFreq: number, hopHeight: number,
+  ): EnemyMesh {
     const tex = makeFaceTexture(C.ENEMY_COLOR[kind]);
     this.faceTextures.push(tex);
     // emissiveMap = same face texture so the body colour + face glow even in
-    // shadow: enemies read as bright pastels with visible faces regardless of
+    // shadow: enemies read as bright primaries with visible faces regardless of
     // lighting angle, and can never render as dark/black silhouettes.
     const mat = new THREE.MeshLambertMaterial({
       map: tex,
@@ -181,7 +194,7 @@ export class GameRenderer {
     mesh.count = 0;
     mesh.frustumCulled = false;
     this.scene.add(mesh);
-    return { mesh, y, radius };
+    return { mesh, y, radius, hopFreq, hopHeight };
   }
 
   private buildHpBar(): HpBar {
@@ -249,7 +262,8 @@ export class GameRenderer {
     const pad = HEX_SIZE * 0.6;
     this.bboxMin.set(minX - pad, -HEX_H, minZ - pad);
     this.bboxMax.set(maxX + pad, 1.8, maxZ + pad);
-    this.target.set((minX + maxX) / 2, 0.2, (minZ + maxZ) / 2);
+    this.baseTarget.set((minX + maxX) / 2, 0.2, (minZ + maxZ) / 2);
+    this.panOffset.set(0, 0, 0);
     this.frameCamera();
 
     this.hoverIndex = -1;
@@ -361,71 +375,77 @@ export class GameRenderer {
     const accent = C.TOWER_COLOR[t.kind];
     const mat = (c: number) => new THREE.MeshLambertMaterial({ color: c });
 
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 0.35, 8), mat(0xe8e2ea));
-    post.position.y = 0.175;
+    // Fat, rounded chunky base for every tower (Duplo-ish).
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.42, 0.5, 14), mat(0xf3eef6));
+    post.position.y = 0.25;
 
     switch (t.kind) {
       case 'plinker': {
         g.add(post);
-        const turret = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.22, 8), mat(accent));
-        turret.position.y = 0.45;
-        const ball = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), mat(C.TOWER_TRIM));
-        ball.position.set(0, 0.55, 0.14);
+        const turret = new THREE.Mesh(new THREE.SphereGeometry(0.34, 16, 12), mat(accent));
+        turret.position.y = 0.72;
+        const ball = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), mat(C.TOWER_TRIM));
+        ball.position.set(0, 0.78, 0.28);
         g.add(turret, ball);
         break;
       }
       case 'freeze': {
         g.add(post);
-        const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.26), mat(accent));
-        crystal.position.y = 0.62;
+        const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.44), mat(accent));
+        crystal.position.y = 1.0;
         pulse.push(crystal);
         g.add(crystal);
         break;
       }
       case 'cannon': {
         g.add(post);
-        const base = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 8), mat(accent));
-        base.position.y = 0.46;
-        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 0.5, 10), mat(0x8a6b4f));
-        barrel.position.set(0, 0.5, 0.22);
+        const base = new THREE.Mesh(new THREE.SphereGeometry(0.4, 14, 12), mat(accent));
+        base.position.y = 0.72;
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.7, 12), mat(0x4a3f46));
+        barrel.position.set(0, 0.82, 0.34);
         barrel.rotation.x = Math.PI / 2.4;
-        g.add(base, barrel);
+        const cap = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), mat(C.TOWER_TRIM));
+        cap.position.set(0, 1.06, 0.56);
+        g.add(base, barrel, cap);
         break;
       }
       case 'lightning': {
         g.add(post);
         for (let i = 0; i < 3; i++) {
-          const ring = new THREE.Mesh(new THREE.TorusGeometry(0.16 - i * 0.03, 0.04, 8, 14), mat(accent));
-          ring.position.y = 0.42 + i * 0.12;
+          const ring = new THREE.Mesh(new THREE.TorusGeometry(0.28 - i * 0.06, 0.07, 10, 18), mat(accent));
+          ring.position.y = 0.66 + i * 0.2;
           ring.rotation.x = Math.PI / 2;
           g.add(ring);
         }
-        const orb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), mat(C.TOWER_TRIM));
-        orb.position.y = 0.82;
+        const orb = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), mat(C.TOWER_TRIM));
+        orb.position.y = 1.28;
         pulse.push(orb);
         g.add(orb);
         break;
       }
       case 'doom': {
-        const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.38, 0.4, 8), mat(0x5a4a55));
-        pedestal.position.y = 0.2;
-        const orb = new THREE.Mesh(new THREE.SphereGeometry(0.34, 16, 12), mat(accent));
-        orb.position.y = 0.72;
-        pulse.push(orb);
-        g.add(pedestal, orb);
+        const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.56, 0.56, 12), mat(0x3e3345));
+        pedestal.position.y = 0.28;
+        const orb = new THREE.Mesh(new THREE.SphereGeometry(0.52, 20, 16), mat(accent));
+        orb.position.y = 1.05;
+        const halo = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.06, 10, 24), mat(0xffffff));
+        halo.position.y = 1.05;
+        halo.rotation.x = Math.PI / 2;
+        pulse.push(orb, halo);
+        g.add(pedestal, orb, halo);
         break;
       }
     }
 
-    // Upgrade level shown as small stacked rings around the base.
+    // Upgrade level shown as chunky stacked rings around the base.
     const level = t.dmgLevel + t.spdLevel;
     for (let i = 0; i < level; i++) {
       const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(0.3, 0.028, 6, 16),
-        mat(i % 2 === 0 ? 0xffd166 : 0xff8fab),
+        new THREE.TorusGeometry(0.46, 0.05, 8, 20),
+        mat(i % 2 === 0 ? 0xffd21e : 0xff4136),
       );
       ring.rotation.x = Math.PI / 2;
-      ring.position.y = 0.04 + i * 0.05;
+      ring.position.y = 0.06 + i * 0.09;
       g.add(ring);
     }
 
@@ -451,11 +471,13 @@ export class GameRenderer {
     this.enemyPosById.clear();
     for (const e of state.enemies) this.enemyPosById.set(e.id, { x: e.x, z: e.z });
 
+    const evs = events ?? state.events;
+    if (evs && evs.length) this.consumeStyleEvents(evs, state);
+
     this.updateEnemies(state);
-    this.updateDoomPulse(state.time);
+    this.updateTowers(state);
 
     // Effects from this frame's events (UI may pass concatenated multi-step events).
-    const evs = events ?? state.events;
     if (evs && evs.length) {
       this.effects.consume(
         evs,
@@ -480,23 +502,40 @@ export class GameRenderer {
       if (idx >= ENEMY_CAP) continue;
 
       const hpFrac = e.maxHp > 0 ? Math.max(0, e.hp / e.maxHp) : 1;
-      const wob = Math.sin(state.time * 4 + e.id * 1.7);
-      const bob = wob * 0.05;
-      const squash = 1 + wob * 0.06;
-      const scale = em.radius * (0.72 + 0.28 * hpFrac);
+
+      // Springy walk: |sin| gives a bouncing hop that touches the ground; the
+      // body squashes at the bottom of the hop and stretches at the top.
+      const phase = state.time * em.hopFreq + e.id * 1.7;
+      const hop = Math.abs(Math.sin(phase)); // 0 at ground, 1 at apex
+      const hopY = em.hopHeight * hop;
+      const stretch = (hop - 0.45) * 0.4; // squashed low, stretched high
+      const sy = 1 + stretch;
+      const sxz = 1 - stretch * 0.55;
+
+      // Spawn "boing": scale in with a springy overshoot for ~0.45s.
+      const spawnAt = this.spawnAt.get(e.id);
+      let boing = 1;
+      if (spawnAt !== undefined) {
+        const age = state.time - spawnAt;
+        if (age >= 0.5) this.spawnAt.delete(e.id);
+        else boing = this.boingScale(Math.max(0, age) / 0.5);
+      }
+
+      const baseScale = em.radius * (0.8 + 0.2 * hpFrac) * boing;
+      const norm = baseScale / em.radius;
 
       // Keep the cute face toward the camera (which looks along -z); a gentle
       // wobble instead of a full spin so the eyes stay readable.
-      this.dummy.position.set(e.x, em.y + bob + scale * 0.02, e.z);
-      this.dummy.rotation.set(0, Math.sin(state.time * 2.2 + e.id) * 0.28, wob * 0.12);
-      this.dummy.scale.set(scale / em.radius, (scale / em.radius) * squash, scale / em.radius);
+      this.dummy.position.set(e.x, em.y + hopY, e.z);
+      this.dummy.rotation.set(0, Math.sin(state.time * 2.2 + e.id) * 0.22, Math.sin(phase) * 0.1);
+      this.dummy.scale.set(norm * sxz, norm * sy, norm * sxz);
       this.dummy.updateMatrix();
       em.mesh.setMatrixAt(idx, this.dummy.matrix);
 
-      // Shield bubble.
+      // Shield bubble (wraps Shelly, bobs with her hop).
       if (e.kind === 'shield' && e.maxShield > 0 && e.shield > 0 && bubbleCount < ENEMY_CAP) {
-        const sf = 0.6 + 0.4 * (e.shield / e.maxShield);
-        this.dummy.position.set(e.x, em.y + bob, e.z);
+        const sf = (0.82 + 0.2 * (e.shield / e.maxShield)) * boing;
+        this.dummy.position.set(e.x, em.y + hopY, e.z);
         this.dummy.rotation.set(0, 0, 0);
         this.dummy.scale.setScalar(sf);
         this.dummy.updateMatrix();
@@ -507,7 +546,7 @@ export class GameRenderer {
       if (e.kind === 'boss' && barIdx < this.hpBars.length) {
         const bar = this.hpBars[barIdx++];
         bar.group.visible = true;
-        bar.group.position.set(e.x, em.y + 1.4, e.z);
+        bar.group.position.set(e.x, em.y + em.radius + 0.9 + hopY, e.z);
         bar.group.quaternion.copy(this.camera.quaternion);
         bar.fill.scale.x = Math.max(0.001, hpFrac);
         bar.mat.color.setRGB(1 - hpFrac * 0.7, 0.4 + hpFrac * 0.5, 0.35);
@@ -524,10 +563,52 @@ export class GameRenderer {
     for (let i = barIdx; i < this.hpBars.length; i++) this.hpBars[i].group.visible = false;
   }
 
-  private updateDoomPulse(time: number): void {
-    const s = 1 + Math.sin(time * 2.2) * 0.08;
-    for (const { pulse } of this.towerObjs.values()) {
-      for (const p of pulse) p.scale.setScalar(s);
+  /** easeOutBack: 0 -> overshoot(~1.1) -> 1, for a friendly cartoon pop-in. */
+  private boingScale(t: number): number {
+    const c1 = 1.70158, c3 = c1 + 1;
+    const p = t - 1;
+    return 1 + c3 * p * p * p + c1 * p * p;
+  }
+
+  /** Record cosmetic timings from this frame's events (spawn boing, fire pop). */
+  private consumeStyleEvents(events: readonly SimEvent[], state: GameState): void {
+    for (const ev of events) {
+      if (ev.type === 'spawn') this.spawnAt.set(ev.enemyId, state.time);
+      else if (ev.type === 'die' || ev.type === 'leak') this.spawnAt.delete(ev.enemyId);
+      else if (ev.type === 'shot') this.fireAt.set(ev.towerId, state.time);
+      else if (ev.type === 'aoe') {
+        // aoe carries no towerId; pop the nearest same-kind tower in range.
+        let best = -1, bestD = Infinity;
+        for (const t of state.towers) {
+          if (t.kind !== ev.kind) continue;
+          const p = this.towerPosById.get(t.id);
+          if (!p) continue;
+          const d = (p.x - ev.x) * (p.x - ev.x) + (p.z - ev.z) * (p.z - ev.z);
+          if (d < bestD) { bestD = d; best = t.id; }
+        }
+        if (best >= 0) this.fireAt.set(best, state.time);
+      }
+    }
+  }
+
+  private updateTowers(state: GameState): void {
+    const pulse = 1 + Math.sin(state.time * 2.2) * 0.08; // idle glow for orbs/crystals
+    for (const [id, obj] of this.towerObjs) {
+      for (const p of obj.pulse) p.scale.setScalar(pulse);
+
+      // Recoil pop: quick squat-and-spring when the tower fires.
+      const firedAt = this.fireAt.get(id);
+      if (firedAt !== undefined) {
+        const age = state.time - firedAt;
+        if (age >= 0.22) {
+          this.fireAt.delete(id);
+          obj.group.scale.set(1, 1, 1);
+        } else {
+          const k = 1 - age / 0.22; // 1 -> 0
+          const kick = k * k;
+          obj.group.scale.set(1 + 0.16 * kick, 1 - 0.2 * kick, 1 + 0.16 * kick);
+        }
+      }
     }
   }
 
@@ -597,9 +678,10 @@ export class GameRenderer {
     this.camera.aspect = w / h;
 
     // Fixed viewing direction (no orbit); solve for the closest distance that
-    // keeps the whole map AABB inside the viewport with a small margin. A
-    // numeric fit against the real corners fills the frame far better than a
-    // bounding-sphere estimate, especially for long/diagonal maps.
+    // keeps the whole map AABB inside the viewport with a small margin, then
+    // zoom IN past that fit so hexes are big and tappable (map may overflow —
+    // the player drags to pan). The fit is measured about the map center.
+    this.target.copy(this.baseTarget);
     const dir = this.tmpVec3.set(0, Math.sin(this.elevation), Math.cos(this.elevation));
     const mn = this.bboxMin, mx = this.bboxMax;
 
@@ -610,10 +692,8 @@ export class GameRenderer {
         this.target.z + dir.z * dist,
       );
       this.camera.lookAt(this.target);
-      this.camera.far = dist * 2 + 100;
       this.camera.updateProjectionMatrix();
       this.camera.updateMatrixWorld(true);
-      this.camera.matrixWorldInverse.copy(this.camera.matrixWorld).invert();
       const limit = 0.94; // NDC margin
       for (let cx = 0; cx < 2; cx++)
         for (let cy = 0; cy < 2; cy++)
@@ -635,13 +715,57 @@ export class GameRenderer {
       if (fits(mid)) hi = mid;
       else lo = mid;
     }
-    fits(hi); // leave camera at the fitting distance
+    this.camDist = hi * this.zoomIn;
+    this.applyCamera();
+  }
 
+  /** Position the camera from the current target (baseTarget + panOffset). */
+  private applyCamera(): void {
+    this.target.copy(this.baseTarget).add(this.panOffset);
+    const dir = this.tmpVec3.set(0, Math.sin(this.elevation), Math.cos(this.elevation));
+    this.camera.position.set(
+      this.target.x + dir.x * this.camDist,
+      this.target.y + dir.y * this.camDist,
+      this.target.z + dir.z * this.camDist,
+    );
+    this.camera.lookAt(this.target);
+    this.camera.far = this.camDist * 3 + 100;
+    this.camera.updateProjectionMatrix();
+    this.camera.updateMatrixWorld(true);
     if (this.scene.fog instanceof THREE.Fog) {
-      const dist = hi;
-      this.scene.fog.near = dist * 0.7;
-      this.scene.fog.far = dist * 2.4;
+      this.scene.fog.near = this.camDist * 0.9;
+      this.scene.fog.far = this.camDist * 3.2;
     }
+  }
+
+  /**
+   * Pan the camera target by a screen-space drag (CSS pixels), clamped so the
+   * map center stays within its footprint and the map can't be lost off-screen.
+   * The view has no roll and looks along -z, so screen-x maps to world +x and
+   * screen-y maps to world +z (foreshortened by the tilt).
+   */
+  panBy(dxPx: number, dyPx: number): void {
+    if (!this.map) return;
+    const h = this.canvas.clientHeight || this.canvas.height || 1;
+    const vHalf = (this.camera.fov * Math.PI) / 180 / 2;
+    const worldPerPx = (2 * this.camDist * Math.tan(vHalf)) / h;
+    // Drag-the-map feel: content follows the finger, so the target moves opposite.
+    this.panOffset.x -= dxPx * worldPerPx;
+    this.panOffset.z -= dyPx * worldPerPx / Math.sin(this.elevation);
+
+    // Clamp so the target never leaves the map footprint.
+    const cx = (this.bboxMin.x + this.bboxMax.x) / 2;
+    const cz = (this.bboxMin.z + this.bboxMax.z) / 2;
+    const halfX = (this.bboxMax.x - this.bboxMin.x) / 2;
+    const halfZ = (this.bboxMax.z - this.bboxMin.z) / 2;
+    this.panOffset.x = THREE.MathUtils.clamp(this.baseTarget.x + this.panOffset.x, cx - halfX, cx + halfX) - this.baseTarget.x;
+    this.panOffset.z = THREE.MathUtils.clamp(this.baseTarget.z + this.panOffset.z, cz - halfZ, cz + halfZ) - this.baseTarget.z;
+    this.applyCamera();
+  }
+
+  resetPan(): void {
+    this.panOffset.set(0, 0, 0);
+    this.applyCamera();
   }
 
   resize(): void {

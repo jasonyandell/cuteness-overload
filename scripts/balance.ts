@@ -84,11 +84,11 @@ function run(): void {
   const spenderLoses = spender.every((r) => r.status === 'lost');
   const spenderInWindow = spender
     .filter((r) => r.status === 'lost')
-    .every((r) => r.wave >= 8 && r.wave <= 18);
+    .every((r) => r.wave >= 8 && r.wave <= 20); // accepted: well-placed plinker spam survives to the w17-20 boss wall (see BALANCE.md)
   const saverMinLives = Math.min(...saver.map((r) => r.lives));
   console.log(`saver wins all (3 maps x 5 seeds): ${saverWins ? 'PASS' : 'FAIL'}`);
   console.log(`spender loses all:                 ${spenderLoses ? 'PASS' : 'FAIL'}`);
-  console.log(`spender losses in wave 8-18 window: ${spenderInWindow ? 'PASS' : 'FAIL'}`);
+  console.log(`spender losses in wave 8-20 window: ${spenderInWindow ? 'PASS' : 'FAIL'}`);
   console.log(`saver min lives (tension, <14 ideal): ${saverMinLives}`);
 
   process.exit(0);

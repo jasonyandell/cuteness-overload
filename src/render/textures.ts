@@ -23,9 +23,9 @@ export function makeFaceTexture(bodyColor: number): THREE.CanvasTexture {
   g.fillRect(0, 0, s, s);
 
   const cx = s / 2;
-  const eyeY = s * 0.44;
-  const eyeDx = s * 0.19;
-  const eyeR = s * 0.16;
+  const eyeY = s * 0.43;
+  const eyeDx = s * 0.21;
+  const eyeR = s * 0.21; // huge googly eyes
 
   // Rosy cheeks.
   g.fillStyle = 'rgba(255,110,150,0.45)';

@@ -51,7 +51,7 @@ interface Confetti {
 const SPARK_CAP = 48;
 const BOLT_CAP = 24;
 const RING_CAP = 28;
-const CONFETTI_CAP = 96;
+const CONFETTI_CAP = 200;
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -188,20 +188,21 @@ export class Effects {
   }
 
   private spawnBurst(x: number, z: number) {
-    const n = 6;
+    const n = 16; // big celebratory pop
     for (let i = 0; i < n; i++) {
       const c = this.grabConfetti();
       c.active = true;
       c.age = 0;
-      c.ttl = 0.5 + Math.random() * 0.3;
+      c.ttl = 0.6 + Math.random() * 0.4;
       const ang = (i / n) * Math.PI * 2 + Math.random();
-      const spd = 1.5 + Math.random() * 1.5;
-      c.x = x; c.y = 0.5; c.z = z;
+      const spd = 2.2 + Math.random() * 2.6;
+      c.x = x; c.y = 0.6; c.z = z;
       c.vx = Math.cos(ang) * spd;
       c.vz = Math.sin(ang) * spd;
-      c.vy = 2.5 + Math.random() * 1.5;
+      c.vy = 3.5 + Math.random() * 2.2;
       c.mat.color.setHex(CONFETTI[(Math.random() * CONFETTI.length) | 0]);
       c.mat.opacity = 1;
+      c.spr.scale.setScalar(0.3 + Math.random() * 0.22); // chunkier bits
       c.spr.visible = true;
       c.spr.position.set(c.x, c.y, c.z);
     }
@@ -238,7 +239,7 @@ export class Effects {
         }
         case 'die': {
           this.spawnBurst(ev.x, ev.z);
-          this.spawnRing(ev.x, ev.z, 0.2, 0.9, 0xffffff, 0.3);
+          this.spawnRing(ev.x, ev.z, 0.3, 1.7, 0xffffff, 0.35);
           break;
         }
         case 'leak': {
