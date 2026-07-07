@@ -138,8 +138,8 @@ export const MAPS: MapDef[] = [
     maxBuildDist: 1,
   }),
   makeMap('double', 'Double Trouble', [doublePathA, doublePathB], {
-    incomeMul: 1.1,
-    hpMul: 1.2,
+    incomeMul: 1.8,
+    hpMul: 1.1,
     maxBuildDist: 2,
     blocked: [
       { q: 4, r: -1 },

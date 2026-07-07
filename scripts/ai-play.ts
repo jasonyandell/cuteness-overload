@@ -135,35 +135,20 @@ type Step =
 // "saving" discipline — the big towers (cannon, lightning, doom) are earned in
 // order, never substituted with a pile of cheap plinkers.
 const SAVER_LIST: Step[] = [
-  { type: 'buy', kind: 'plinker' }, // 0
+  { type: 'buy', kind: 'plinker' }, // 0 — early coverage
   { type: 'buy', kind: 'plinker' }, // 1
-  { type: 'buy', kind: 'cannon' }, // 2
+  { type: 'buy', kind: 'cannon' }, // 2 — first splash
   { type: 'up', tower: 2, which: 'dmg' }, // cannon dmg
-  { type: 'buy', kind: 'freeze' }, // 3
-  { type: 'up', tower: 0, which: 'dmg' }, // plinker dmg
-  { type: 'buy', kind: 'lightning' }, // 4
+  { type: 'buy', kind: 'freeze' }, // 3 — slow for swarms/shields
+  { type: 'buy', kind: 'cannon' }, // 4 — second splash (covers 2nd path on double)
+  { type: 'buy', kind: 'lightning' }, // 5 — swarm clear
   { type: 'up', tower: 2, which: 'dmg' }, // cannon dmg
-  { type: 'up', tower: 4, which: 'dmg' }, // lightning dmg
-  { type: 'buy', kind: 'cannon' }, // 5
-  { type: 'up', tower: 5, which: 'dmg' }, // cannon2 dmg
-  { type: 'up', tower: 2, which: 'spd' }, // cannon spd
-  { type: 'buy', kind: 'doom' }, // 6
-  { type: 'up', tower: 6, which: 'dmg' }, // doom dmg
-  { type: 'up', tower: 4, which: 'dmg' }, // lightning dmg
-  { type: 'buy', kind: 'cannon' }, // 7
-  { type: 'up', tower: 6, which: 'dmg' }, // doom dmg
-  { type: 'up', tower: 5, which: 'spd' }, // cannon2 spd
-  { type: 'up', tower: 2, which: 'dmg' }, // cannon dmg
-  { type: 'buy', kind: 'lightning' }, // 8
-  { type: 'up', tower: 6, which: 'spd' }, // doom spd
-  { type: 'up', tower: 7, which: 'dmg' }, // cannon3 dmg
-  { type: 'up', tower: 4, which: 'spd' }, // lightning spd
-  { type: 'buy', kind: 'doom' }, // 9
-  { type: 'up', tower: 9, which: 'dmg' }, // doom2 dmg
-  { type: 'up', tower: 6, which: 'dmg' }, // doom dmg
-  { type: 'up', tower: 8, which: 'dmg' }, // lightning2 dmg
-  { type: 'up', tower: 5, which: 'dmg' }, // cannon2 dmg
-  { type: 'up', tower: 3, which: 'spd' }, // freeze spd (more slow uptime)
+  { type: 'buy', kind: 'plinker' }, // 6 — more coverage
+  { type: 'up', tower: 4, which: 'dmg' }, // cannon2 dmg
+  { type: 'buy', kind: 'doom' }, // 7 — THE big save; the discipline payoff
+  { type: 'up', tower: 7, which: 'dmg' }, // doom dmg
+  // After this the value-greedy tail (see tailUpgrade) spends everything on the
+  // best DPS-per-dollar cannon/lightning/doom or upgrade — no more cheap plinkers.
 ];
 
 interface Strategy {

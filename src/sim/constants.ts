@@ -50,7 +50,7 @@ export const TOWERS: Record<TowerKind, TowerSpec> = {
     desc: 'Zaps a cutie, then ricochets to friends.',
   },
   doom: {
-    name: 'Snuggle Nuke', cost: 240, range: 3.8, damage: 90, rate: 0.18, splash: 2.4,
+    name: 'Snuggle Nuke', cost: 240, range: 3.8, damage: 90, rate: 0.26, splash: 2.4,
     desc: 'Extremely strong. Extremely slow. Extremely snuggly.',
   },
 };
