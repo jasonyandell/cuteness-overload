@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <radialGradient id="b" cx="42%" cy="38%" r="70%">
+      <stop offset="0%" stop-color="#ffd9ec"/>
+      <stop offset="100%" stop-color="#ff9ecb"/>
+    </radialGradient>
+  </defs>
+  <!-- cute blob body -->
+  <path d="M32 6c14 0 24 10 24 26 0 16-10 26-24 26S8 48 8 32 18 6 32 6z" fill="url(#b)" stroke="#e86fa8" stroke-width="2.5"/>
+  <!-- rosy cheeks -->
+  <ellipse cx="19" cy="40" rx="5" ry="3.5" fill="#ff8fbf" opacity="0.55"/>
+  <ellipse cx="45" cy="40" rx="5" ry="3.5" fill="#ff8fbf" opacity="0.55"/>
+  <!-- googly eyes -->
+  <circle cx="24" cy="30" r="6" fill="#fff"/>
+  <circle cx="40" cy="30" r="6" fill="#fff"/>
+  <circle cx="25.5" cy="31.5" r="2.8" fill="#3a2b3f"/>
+  <circle cx="41.5" cy="31.5" r="2.8" fill="#3a2b3f"/>
+  <circle cx="26.5" cy="30.2" r="1" fill="#fff"/>
+  <circle cx="42.5" cy="30.2" r="1" fill="#fff"/>
+  <!-- happy mouth -->
+  <path d="M27 43c2 3 8 3 10 0" fill="none" stroke="#a8446f" stroke-width="2.2" stroke-linecap="round"/>
+</svg>
