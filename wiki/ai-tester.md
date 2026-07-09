@@ -28,7 +28,13 @@ npx tsx scripts/ai-play.ts [mapId] [seed] [strategy]
 ```
 
 `playGame(mapId, seed, strategy)` is the reusable core (also imported by
-`balance.ts`). Each game sims in ~15–25ms.
+`balance.ts`). Each game sims in ~15–25ms. Opts: `log`, `maxWave`, `cfg`
+(saver-knob override), and `endless: true` (no wave-20 win; runs until death or
+`maxWave`). Measured 2026-07-08: the saver survives endless to **wave 24–25 on
+every map × seed** — it aces 21–23, then `ENDLESS_HP_GROWTH = 1.3`/wave
+compounding outruns any possible income (~7k-hp Bloops at 24, ~55k Chonk at 25)
+while towers hit their track caps. Endless is a "how long can you last" score,
+not winnable.
 
 ### Coverage precompute
 

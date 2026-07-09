@@ -460,7 +460,13 @@ export function playGame(
   mapId: string,
   seed: number,
   strategyName: string,
-  opts: { log?: boolean; maxWave?: number; cfg?: Partial<typeof SAVER_CFG> } = {},
+  opts: {
+    log?: boolean;
+    maxWave?: number;
+    cfg?: Partial<typeof SAVER_CFG>;
+    /** Play endless mode: no wave-20 win; runs until death or maxWave. */
+    endless?: boolean;
+  } = {},
 ): PlayResult {
   const map = MAPS.find((m) => m.id === mapId);
   if (!map) throw new Error('unknown map ' + mapId);
@@ -471,7 +477,7 @@ export function playGame(
   }
 
   const cov = precompute(map);
-  const state = createGame(map, seed);
+  const state = createGame(map, seed, opts.endless ?? false);
   const ctx: PlayCtx = { listIdx: 0, placed: [] };
   const maxWave = opts.maxWave ?? TOTAL_WAVES;
 

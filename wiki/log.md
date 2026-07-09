@@ -122,3 +122,10 @@ Pages updated: [[towers]] (rewrite of upgrade system + stat table),
 boss curve), [[index]] one-liners. Lint: opened **L7** (remote-play runs the
 pre-rebalance policy — verified it still wins) and **L8** (BALANCE.md/DESIGN.md
 now historical re: upgrades); see [[lint]].
+
+## [2026-07-08] ingest | Endless-mode harness option + measured endless ceiling
+
+`playGame` (`scripts/ai-play.ts`) gained `opts.endless` (creates the game with
+`endless=true`, no wave-20 win). Measured: saver dies at wave 25 (meadow) / 24
+(creek, double) on all seeds — clean through 23, then the 1.3×/wave endless HP
+compounding outruns income and capped towers. [[ai-tester]] updated.
