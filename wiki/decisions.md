@@ -91,7 +91,7 @@ pack. See [[sim-engine]].
 
 ## D9 — Doom is "slow-*firing*," not a slow field  ⚠
 
-**Decision:** the Snuggle Nuke (`doom`) is implemented as a huge **damage** splash
+**Decision:** the Big Hug (`doom`) is implemented as a huge **damage** splash
 with a very low fire rate (0.26/s) — it does **not** slow enemies.
 **Why:** it's the boss-killer; its "extremely slow" flavor refers to firing
 cadence, not crowd control (that's the freeze tower's job). **Caveat:**

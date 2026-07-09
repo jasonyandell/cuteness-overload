@@ -129,3 +129,34 @@ now historical re: upgrades); see [[lint]].
 `endless=true`, no wave-20 win). Measured: saver dies at wave 25 (meadow) / 24
 (creek, double) on all seeds — clean through 23, then the 1.3×/wave endless HP
 compounding outruns income and capped towers. [[ai-tester]] updated.
+
+## [2026-07-08] ingest | UX tweaks (tower-select priority, damage stat, hex range) + evil-cute restyle
+
+Two work packages, no balance/sim-behavior change (all four balance target-checks
+still PASS; AI aces wave 20).
+
+Package A — UX:
+- `src/main.ts`: a tap on a cell holding a tower now **always selects it** (clears
+  build arming, opens the panel), even mid-placement — existing tower wins over
+  placement (`onPointerUp` reordered). Tower panel now shows lifetime damage and
+  damage-per-coin.
+- `src/sim/types.ts` + `src/sim/engine.ts`: `Tower.dmgDealt` — lifetime hp+shield
+  actually removed. `damageEnemy()` returns the removed amount (capped, no
+  overkill inflation); `fire()` accumulates it on every path incl. freeze. Init 0
+  in `placeTower`. Scripts (`ai-play.ts`, `remote-play.ts`) updated for the new
+  Tower field. `src/ui/save.ts`: old saves normalized (`dmgDealt` → 0 on load).
+- `src/render/renderer.ts`: `showRange` now also highlights the **path hexes**
+  within range via a pooled instanced overlay (`rangeHexes`, thin flat-top tiles),
+  display-only; sim targeting unchanged.
+
+Package B — presentation only:
+- `src/sim/constants.ts`: evil-cute tower display names/descs (doom → "Big Hug";
+  plinker → "Pebble Pal"; freeze → "Brr-Buddy"; lightning → "Zappy Tickler").
+  Kind keys unchanged. `src/main.ts`: sweeter wave banners, win ("You survived the
+  cuteness!") / lose ("They loved you to pieces!") copy, doom icon → 🫂.
+- `src/render/effects.ts` + `textures.ts` + `theme.ts`: death poof is now a burst
+  of upward-floating **hearts** (new pool of 160, `makeHeartTexture`, `HEARTS`
+  palette), death ring softened to pink. No gore.
+
+Pages updated: [[towers]], [[sim-engine]], [[rendering]], [[ui-flow]],
+[[overview]], [[decisions]] (name refs), [[index]] one-liners.

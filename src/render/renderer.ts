@@ -29,6 +29,7 @@ import { Effects } from './effects';
 const SQRT3 = Math.sqrt(3);
 const HEX_H = 0.5; // prism height; top surface sits at y = 0
 const ENEMY_CAP = 256; // max instances per enemy kind
+const RANGE_HEX_CAP = 256; // max path tiles highlighted inside a tower's range
 const HOVER_VALID = 0x6bff8f;
 const HOVER_INVALID = 0xff6b6b;
 
@@ -76,6 +77,9 @@ export class GameRenderer {
   // Hover + range.
   private hoverIndex = -1;
   private rangeDisc: THREE.Mesh;
+  // Path hexes within a selected/previewed tower's range ("the hexes you'll
+  // hit") — display only; sim targeting stays a circular check.
+  private rangeHexes: THREE.InstancedMesh;
 
   // Camera framing.
   private target = new THREE.Vector3(); // = baseTarget + panOffset (derived)
@@ -188,6 +192,18 @@ export class GameRenderer {
     this.rangeDisc.visible = false;
     this.rangeDisc.position.y = 0.05;
     this.scene.add(this.rangeDisc);
+
+    // Flat hex tiles that light up the path cells a tower reaches. Thin prism
+    // matching the flat-top terrain orientation, floating just above ground.
+    const rangeHexGeo = new THREE.CylinderGeometry(HEX_SIZE * 0.82, HEX_SIZE * 0.82, 0.04, 6);
+    rangeHexGeo.rotateY(Math.PI / 6);
+    const rangeHexMat = new THREE.MeshBasicMaterial({
+      color: 0x8fe0ff, transparent: true, opacity: 0.4, depthWrite: false,
+    });
+    this.rangeHexes = new THREE.InstancedMesh(rangeHexGeo, rangeHexMat, RANGE_HEX_CAP);
+    this.rangeHexes.count = 0;
+    this.rangeHexes.frustumCulled = false;
+    this.scene.add(this.rangeHexes);
 
     this.resize();
   }
@@ -682,13 +698,36 @@ export class GameRenderer {
   }
 
   showRange(x: number, z: number, range: number): void {
+    // Subtle circle for readability…
     this.rangeDisc.position.set(x, 0.05, z);
     this.rangeDisc.scale.setScalar(range);
     this.rangeDisc.visible = true;
+
+    // …plus the concrete path hexes whose center falls inside `range` (world
+    // units). Matches the sim's circular targeting; display only.
+    let idx = 0;
+    if (this.map) {
+      const r2 = range * range;
+      for (const cell of this.map.cells) {
+        if (cell.t !== 'path') continue;
+        const { x: cx, z: cz } = hexToWorld(cell.q, cell.r);
+        const dx = cx - x, dz = cz - z;
+        if (dx * dx + dz * dz > r2 || idx >= RANGE_HEX_CAP) continue;
+        this.dummy.position.set(cx, 0.06, cz);
+        this.dummy.rotation.set(0, 0, 0);
+        this.dummy.scale.set(1, 1, 1);
+        this.dummy.updateMatrix();
+        this.rangeHexes.setMatrixAt(idx++, this.dummy.matrix);
+      }
+    }
+    this.rangeHexes.count = idx;
+    this.rangeHexes.instanceMatrix.needsUpdate = true;
   }
 
   hideRange(): void {
     this.rangeDisc.visible = false;
+    this.rangeHexes.count = 0;
+    this.rangeHexes.instanceMatrix.needsUpdate = true;
   }
 
   // ---- camera / resize ------------------------------------------------------
@@ -855,6 +894,8 @@ export class GameRenderer {
     (this.hpBarFill.material as THREE.Material).dispose();
     this.rangeDisc.geometry.dispose();
     (this.rangeDisc.material as THREE.Material).dispose();
+    this.rangeHexes.geometry.dispose();
+    (this.rangeHexes.material as THREE.Material).dispose();
 
     this.renderer.dispose();
   }

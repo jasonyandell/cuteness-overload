@@ -90,8 +90,13 @@ allocation** on the hot path. Pools:
 - **bolts** (24) — stretched boxes for lightning `chain` events.
 - **rings** (28) — flat expanding rings for `aoe` events, deaths, and `leak`
   flashes at the home.
-- **confetti** (200) — a big celebratory sprite burst on `die` (16 chunky bits,
+- **confetti** (200) — a celebratory sprite burst on `die` (16 chunky bits,
   scale 0.30–0.52, with gravity/bounce), in the crayon-primary `CONFETTI` palette.
+- **hearts** (160) — the **evil-cute death poof**: on `die`, 8 heart sprites
+  (from `makeHeartTexture`, tinted from the pink `HEARTS` palette) pop in and
+  **float upward** (lighter-than-gravity, drifting outward, fading). The death
+  `aoe` ring is softened to pink. No gore, ever — enemies are simply overcome
+  with love and drift away.
 
 `consume(events, towerPos, enemyPos, homePos)` turns one tick's events into
 effects; ids are resolved to positions at consume time and **missing ids are
@@ -122,8 +127,13 @@ run 1–2 sim steps per frame, it passes the **concatenated** events of all step
   inverts `hexToWorld` (`q = x/1.5`, `r = z/√3 − q/2`), and `axialRound`s to the
   nearest hex; returns it only if that cell exists on the map.
 - **Hover/range** (`setHover`, `showRange`) recolor the hovered terrain instance
-  (green valid / red invalid) and show a translucent range disc. Wired from the UI
-  during placement; see [[ui-flow]].
+  (green valid / red invalid) and show a translucent range disc **plus a highlight
+  of the actual `path` hexes within range** — a pooled instanced overlay
+  (`rangeHexes`, cap 256) of thin flat-top hex tiles floating just above the
+  ground, showing "the hexes you'll hit". This is **display only**: the sim's
+  targeting stays a circular distance check (`stats.range`); the overlay just
+  marks the path cells whose center falls inside that circle. Wired from the UI
+  during placement and when a tower is selected; see [[ui-flow]].
 
 ## Lighting & materials
 

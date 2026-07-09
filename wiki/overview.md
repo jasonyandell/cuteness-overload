@@ -29,9 +29,9 @@ impatient "spender" loses. This is verified continuously by a headless
 
 ## Feature list
 
-- **5 towers** — Pebble Plinker, Brr Blaster (freeze), Boop Cannon, Zap Zapper
-  (lightning), Snuggle Nuke (doom). Each has damage + attack-speed upgrades
-  (5 levels each). See [[towers]].
+- **5 towers** — Pebble Pal, Brr-Buddy (freeze), Boop Cannon, Zappy Tickler
+  (lightning), Big Hug (doom). Each has damage + attack-speed upgrades
+  (5 levels each; plinker only 2). See [[towers]].
 - **4 enemy kinds** — Bloop (regular), Zippy (fast), Shelly (shielded), Chonk
   (boss). See [[enemies]].
 - **3 maps** — Meadow Lane, Twisty Creek, Double Trouble, of increasing

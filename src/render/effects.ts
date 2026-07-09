@@ -4,8 +4,8 @@
 
 import * as THREE from 'three';
 import type { SimEvent, TowerKind } from '../sim/types';
-import { AOE_COLOR, SHOT_COLOR, LEAK_FLASH, CONFETTI } from './theme';
-import { makeDotTexture } from './textures';
+import { AOE_COLOR, SHOT_COLOR, LEAK_FLASH, CONFETTI, HEARTS } from './theme';
+import { makeDotTexture, makeHeartTexture } from './textures';
 
 type Vec2 = { x: number; z: number };
 
@@ -48,10 +48,22 @@ interface Confetti {
   vx: number; vy: number; vz: number;
 }
 
+interface Heart {
+  spr: THREE.Sprite;
+  mat: THREE.SpriteMaterial;
+  active: boolean;
+  age: number;
+  ttl: number;
+  x: number; y: number; z: number;
+  vx: number; vy: number; vz: number;
+  size: number;
+}
+
 const SPARK_CAP = 48;
 const BOLT_CAP = 24;
 const RING_CAP = 28;
 const CONFETTI_CAP = 200;
+const HEART_CAP = 160;
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -61,7 +73,9 @@ export class Effects {
   private bolts: Bolt[] = [];
   private rings: Ring[] = [];
   private confetti: Confetti[] = [];
+  private hearts: Heart[] = [];
   private dot: THREE.CanvasTexture;
+  private heartTex: THREE.CanvasTexture;
 
   // Reused scratch objects (no per-frame allocation).
   private tmpDir = new THREE.Vector3();
@@ -72,6 +86,7 @@ export class Effects {
   constructor(parent: THREE.Object3D) {
     parent.add(this.group);
     this.dot = makeDotTexture();
+    this.heartTex = makeHeartTexture();
 
     const sparkGeo = new THREE.SphereGeometry(0.12, 8, 6);
     for (let i = 0; i < SPARK_CAP; i++) {
@@ -114,6 +129,17 @@ export class Effects {
         x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0,
       });
     }
+
+    for (let i = 0; i < HEART_CAP; i++) {
+      const mat = new THREE.SpriteMaterial({ map: this.heartTex, transparent: true, depthWrite: false });
+      const spr = new THREE.Sprite(mat);
+      spr.visible = false;
+      this.group.add(spr);
+      this.hearts.push({
+        spr, mat, active: false, age: 0, ttl: 0,
+        x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, size: 0.3,
+      });
+    }
   }
 
   private grabSpark(): Spark {
@@ -139,6 +165,12 @@ export class Effects {
     for (const c of this.confetti) if (!c.active) return c;
     let oldest = this.confetti[0];
     for (const c of this.confetti) if (c.age > oldest.age) oldest = c;
+    return oldest;
+  }
+  private grabHeart(): Heart {
+    for (const h of this.hearts) if (!h.active) return h;
+    let oldest = this.hearts[0];
+    for (const h of this.hearts) if (h.age > oldest.age) oldest = h;
     return oldest;
   }
 
@@ -208,6 +240,31 @@ export class Effects {
     }
   }
 
+  // Death poof: a gentle upward burst of hearts. No gore — the cutie is simply
+  // overcome with love and floats away.
+  private spawnHearts(x: number, z: number) {
+    const n = 8;
+    for (let i = 0; i < n; i++) {
+      const h = this.grabHeart();
+      h.active = true;
+      h.age = 0;
+      h.ttl = 0.7 + Math.random() * 0.5;
+      const ang = (i / n) * Math.PI * 2 + Math.random();
+      const spd = 0.6 + Math.random() * 1.1;
+      h.x = x; h.y = 0.55; h.z = z;
+      h.vx = Math.cos(ang) * spd;
+      h.vz = Math.sin(ang) * spd;
+      h.vy = 1.8 + Math.random() * 1.2; // float up
+      h.size = 0.34 + Math.random() * 0.22;
+      h.mat.color.setHex(HEARTS[(Math.random() * HEARTS.length) | 0]);
+      h.mat.opacity = 1;
+      h.mat.rotation = (Math.random() - 0.5) * 0.6;
+      h.spr.scale.setScalar(0.001);
+      h.spr.visible = true;
+      h.spr.position.set(h.x, h.y, h.z);
+    }
+  }
+
   /**
    * Turn one tick's events into effects. `towerPos`/`enemyPos` resolve ids to
    * world positions at the moment of consumption; missing ids are skipped
@@ -238,8 +295,9 @@ export class Effects {
           break;
         }
         case 'die': {
+          this.spawnHearts(ev.x, ev.z);
           this.spawnBurst(ev.x, ev.z);
-          this.spawnRing(ev.x, ev.z, 0.3, 1.7, 0xffffff, 0.35);
+          this.spawnRing(ev.x, ev.z, 0.3, 1.7, 0xffc0d8, 0.35);
           break;
         }
         case 'leak': {
@@ -289,6 +347,22 @@ export class Effects {
       c.spr.position.set(c.x, c.y, c.z);
       c.mat.opacity = 1 - t * t;
     }
+    for (const h of this.hearts) {
+      if (!h.active) continue;
+      h.age += dt;
+      const t = h.age / h.ttl;
+      if (t >= 1) { h.active = false; h.spr.visible = false; continue; }
+      h.vy -= 2.4 * dt;    // rise, then ease off (lighter than gravity)
+      h.vx *= 0.96; h.vz *= 0.96;
+      h.x += h.vx * dt;
+      h.y += h.vy * dt;
+      h.z += h.vz * dt;
+      // Pop in fast, then linger and fade.
+      const pop = Math.min(1, t * 6);
+      h.spr.scale.setScalar(h.size * pop);
+      h.spr.position.set(h.x, h.y, h.z);
+      h.mat.opacity = 1 - t * t;
+    }
   }
 
   dispose() {
@@ -296,7 +370,9 @@ export class Effects {
     for (const b of this.bolts) { b.mesh.geometry.dispose(); b.mat.dispose(); }
     for (const r of this.rings) { r.mesh.geometry.dispose(); r.mat.dispose(); }
     for (const c of this.confetti) c.mat.dispose();
+    for (const h of this.hearts) h.mat.dispose();
     this.dot.dispose();
+    this.heartTex.dispose();
     this.group.removeFromParent();
   }
 }

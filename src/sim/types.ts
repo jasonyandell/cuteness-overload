@@ -83,6 +83,7 @@ export interface Tower {
   spdLevel: number;   // 0..tracks.spd.max for this tower kind
   cooldown: number;   // seconds until next shot
   spent: number;      // total money invested (for sell refund)
+  dmgDealt: number;   // lifetime hp+shield actually removed (overkill not counted)
 }
 
 export interface Enemy {

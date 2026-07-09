@@ -219,7 +219,7 @@ function tailDecision(state: GameState, cov: Coverage): Decision {
     const covScore = coverageScore(cov, cw.x, cw.z, TOWERS[kind].range);
     if (covScore <= 0) continue;
     const fresh: Tower = {
-      id: -1, kind, q: cell.q, r: cell.r, dmgLevel: 0, spdLevel: 0, cooldown: 0, spent: cost,
+      id: -1, kind, q: cell.q, r: cell.r, dmgLevel: 0, spdLevel: 0, cooldown: 0, spent: cost, dmgDealt: 0,
     };
     const gain = towerDps(fresh) * Math.min(1, covScore / 20);
     const val = gain / cost;

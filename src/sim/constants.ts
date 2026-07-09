@@ -42,22 +42,22 @@ export const TOWERS: Record<TowerKind, TowerSpec> = {
   plinker: {
     // Fast and cheap with a deliberate CEILING: only 2 levels per track, so a
     // pile of plinkers can't carry the late game (max ~46 DPS, single target).
-    name: 'Pebble Plinker', cost: 20, range: 2.9, damage: 6.5, rate: 1.6,
+    name: 'Pebble Pal', cost: 20, range: 2.9, damage: 6.5, rate: 1.6,
     tracks: {
       dmg: { label: '⚔️ Damage', blurb: '+35% dmg', max: 2, dmgMul: 1.35 },
       spd: { label: '⚡ Speed', blurb: '+35% speed', max: 2, rateMul: 1.35 },
     },
-    desc: 'Cheap and cheerful. Plinks one cutie at a time. Caps out early.',
+    desc: 'Boops one darling at a time with teeny pebbles. Bless its heart, it tires by the tenth wave.',
   },
   freeze: {
     // Utility tower: its damage is token, so its tracks grow RANGE and RATE.
-    name: 'Brr Blaster', cost: 35, range: 2.6, damage: 3, rate: 0.9,
+    name: 'Brr-Buddy', cost: 35, range: 2.6, damage: 3, rate: 0.9,
     slowFactor: 0.55, slowDuration: 2.0, splash: 1.6,
     tracks: {
       dmg: { label: '📡 Range', blurb: '+12% range, +10% area', max: 5, rangeMul: 1.12, splashMul: 1.1 },
       spd: { label: '⚡ Speed', blurb: '+45% speed', max: 5, rateMul: 1.45 },
     },
-    desc: 'Chilly pulse that slows everything nearby.',
+    desc: 'Blows frosty little kisses. Everyone nearby slows right down for a cuddle.',
   },
   cannon: {
     // Even damage on the field: upgrades widen the splash as they deepen it.
@@ -66,26 +66,26 @@ export const TOWERS: Record<TowerKind, TowerSpec> = {
       dmg: { label: '⚔️ Damage', blurb: '+33% dmg, +7% splash', max: 5, dmgMul: 1.33, splashMul: 1.07, rangeMul: 1.03 },
       spd: { label: '⚡ Speed', blurb: '+45% speed', max: 5, rateMul: 1.45 },
     },
-    desc: 'Lobs a big boop. Splash damage.',
+    desc: 'Lobs one enormous BOOP and shares the affection with the whole snuggly cluster.',
   },
   lightning: {
     // Damage down a chain of individuals: upgrades make late hops hit harder.
-    name: 'Zap Zapper', cost: 90, range: 3.4, damage: 14, rate: 1.0,
+    name: 'Zappy Tickler', cost: 90, range: 3.4, damage: 14, rate: 1.0,
     chains: 4, chainFalloff: 0.72,
     tracks: {
       dmg: { label: '⚔️ Damage', blurb: '+38% dmg, chains hit harder', max: 5, dmgMul: 1.38, falloffAdd: 0.03, rangeMul: 1.03 },
       spd: { label: '⚡ Speed', blurb: '+45% speed', max: 5, rateMul: 1.45 },
     },
-    desc: 'Zaps a cutie, then ricochets to friends.',
+    desc: 'A tingly little zap that leaps friend-to-friend, holding hands all the way down.',
   },
   doom: {
     // A ton of damage on the field — if you can afford it.
-    name: 'Snuggle Nuke', cost: 240, range: 3.8, damage: 90, rate: 0.26, splash: 2.4,
+    name: 'Big Hug', cost: 240, range: 3.8, damage: 90, rate: 0.26, splash: 2.4,
     tracks: {
       dmg: { label: '⚔️ Damage', blurb: '+35% dmg, +6% splash', max: 5, dmgMul: 1.35, splashMul: 1.06, rangeMul: 1.03 },
       spd: { label: '⚡ Speed', blurb: '+45% speed', max: 5, rateMul: 1.45 },
     },
-    desc: 'Extremely strong. Extremely slow. Extremely snuggly.',
+    desc: 'One enormous, loving squeeze. Takes forever to wind up. Nobody in the whole huddle walks away.',
   },
 };
 

@@ -55,3 +55,6 @@ export const SHOT_COLOR: Record<TowerKind, number> = {
 
 export const LEAK_FLASH = 0xff2a2a;
 export const CONFETTI = [0xff4136, 0x2f6bff, 0xffd21e, 0x33c14a, 0xff8c1a, 0x9b30ff, 0xffffff];
+
+// Death poof: enemies pop into a burst of adorable hearts (no gore, ever).
+export const HEARTS = [0xff6b9d, 0xff4d8d, 0xffa6c9, 0xff2d6f, 0xff9ecb, 0xffffff];

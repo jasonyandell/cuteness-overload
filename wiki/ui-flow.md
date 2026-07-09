@@ -67,7 +67,10 @@ Win/lose is detected by watching `state.status` change across frames
   `GameState` is plain JSON ([[architecture|Rule 4]]), save = `JSON.stringify`,
   resume = parse + `renderer.setMap` (derived path geoms rebuild lazily in the
   engine). Written on autosave, on `visibilitychange`→hidden, and on `pagehide`.
-  Cleared on win (non-endless) / loss / New Game overwrite.
+  Cleared on win (non-endless) / loss / New Game overwrite. `readSave` also
+  **forward-normalizes** old saves — any tower missing `dmgDealt` (added with
+  per-tower damage tracking, see [[towers]]) is set to 0 so pre-existing saves
+  never crash.
 - **`cuteness-overload-meta-v1`** — a `Meta { speed }` (persisted speed toggle),
   separate from the save so settings survive across games.
 
@@ -82,9 +85,13 @@ the cumulative movement exceeds **`PAN_THRESHOLD = 10`px** the gesture becomes a
 [[rendering|`renderer.panBy(dx, dy)`]], and the pointerup neither places nor
 selects (`wasPanning` short-circuits `onPointerUp`). Under the threshold it's a
 **tap**: when a tower is **armed** (build-bar tap), pointer-move previews placement
-via `renderer.pickHex` + `setHover` + `showRange` and pointerup places it
-(`placeTower`); otherwise a tap selects the tower under the pointer (or closes the
-panel). `pointercancel` resets the gesture. `resetPan` is called on every new game
+via `renderer.pickHex` + `setHover` + `showRange`. On pointerup a tap on a cell
+that **already holds a tower always selects that tower** (clearing the build
+arming, opening its upgrade panel) — an existing tower wins over placement, even
+mid-arming; otherwise, if armed, it places (`placeTower`). A tap on empty ground
+with nothing armed closes the panel. `pointercancel` resets the gesture. The
+selected tower's panel shows its lifetime damage and damage-per-coin (see
+[[towers]]). `resetPan` is called on every new game
 (`enterGame`). Right-click / Escape disarms. Keyboard: Escape backs out (disarm →
 close panel → pause), Space toggles pause.
 

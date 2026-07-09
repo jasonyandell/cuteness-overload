@@ -29,15 +29,15 @@ then [[overview]].
 ## Simulation (`src/sim/`)
 
 - [[sim-engine]] — `step()` internals: step order, targeting, damage/shield model, serialization/resume.
-- [[towers]] — the 5 towers: stats, per-tower upgrade tracks, the delivered-damage fairness contract, cost formula, sell refund, design intent.
+- [[towers]] — the 5 towers: stats, evil-cute display names, per-tower upgrade tracks, the delivered-damage fairness contract, per-tower `dmgDealt` accounting, cost formula, sell refund, design intent.
 - [[enemies]] — the 4 enemy kinds: stats, HP/bounty scaling (trash 1.22× vs boss 1.16×, hpMul exemption), shield regen, slow.
 - [[waves-economy]] — 25s cadence, wave composition table, spawn scheduling, wave income, skip-bonus formula, endless scaling, the "save up to win" thesis.
 - [[maps]] — the 3 maps: measured stats, difficulty knobs, the Double Trouble balance story.
 
 ## Presentation
 
-- [[rendering]] — three.js renderer: bold crayon-primary style, instancing (incl. per-enemy health bars), hop/boing/recoil animation, effects pooling, zoomed pannable camera, black-enemy postmortem.
-- [[ui-flow]] — screens, fixed-timestep game loop, save/resume, chunky primary UI + drag-to-pan, the `window.__game` automation API.
+- [[rendering]] — three.js renderer: bold crayon-primary style, instancing (incl. per-enemy health bars), hop/boing/recoil animation, effects pooling (incl. evil-cute heart death poof), path-hex range highlight, zoomed pannable camera, black-enemy postmortem.
+- [[ui-flow]] — screens, fixed-timestep game loop, save/resume (with dmgDealt normalization), tower-select-wins-over-placement, damage stat panel, chunky primary UI + drag-to-pan, the `window.__game` automation API.
 
 ## Testing, balance & ops
 

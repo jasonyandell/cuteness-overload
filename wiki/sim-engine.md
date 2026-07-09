@@ -56,12 +56,17 @@ per-tower upgrade tracks (see [[towers]]). Cooldown after firing:
 
 ## Damage & shield model
 
-`damageEnemy(state, e, amount)` (in `engine.ts`):
+`damageEnemy(state, e, amount): number` (in `engine.ts`):
 
 - Records `e.lastHitAt = time` (resets the shield-regen timer).
 - **Shield absorbs first.** If the enemy has `shield > 0`, damage is subtracted
   from the shield pool; overflow spills into `hp`.
 - Only `shield` (Shelly) enemies have a shield pool. See [[enemies]].
+- **Returns the hp+shield actually removed**, capped at `min(amount, shield +
+  max(0, hp))`, so overkill isn't counted. `fire()` adds this to the firing
+  tower's `Tower.dmgDealt` (all paths: direct hit, splash loop, chain hops, and
+  freeze's token damage). Pure accounting — no effect on outcomes. See
+  [[towers]] for the stat's UI surfacing and save normalization.
 
 **Shield regen:** in the move phase, if an enemy has `maxShield > 0`, is below
 full shield, and has gone `SHIELD_REGEN_DELAY = 2.5`s without being hit, its

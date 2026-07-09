@@ -166,18 +166,22 @@ function spawnEnemy(state: GameState, map: MapDef, item: SpawnItem): void {
 }
 
 // ---- Damage helpers ----
-function damageEnemy(state: GameState, e: Enemy, amount: number): void {
-  if (amount <= 0) return;
+// Returns the hp+shield ACTUALLY removed, capped at what the enemy had left, so
+// overkill (splash/chain hitting an already-dying enemy) never inflates stats.
+function damageEnemy(state: GameState, e: Enemy, amount: number): number {
+  if (amount <= 0) return 0;
   e.lastHitAt = state.time;
+  const removed = Math.min(amount, e.shield + Math.max(0, e.hp));
   if (e.shield > 0) {
     if (amount <= e.shield) {
       e.shield -= amount;
-      return;
+      return removed;
     }
     amount -= e.shield;
     e.shield = 0;
   }
   e.hp -= amount;
+  return removed;
 }
 
 // Freeze slow: never stacks — keep the strongest factor (lowest) and longest duration.
@@ -203,7 +207,7 @@ function fire(
 
   switch (tower.kind) {
     case 'plinker': {
-      damageEnemy(state, target, dmg);
+      tower.dmgDealt += damageEnemy(state, target, dmg);
       state.events.push({ type: 'shot', towerId: tower.id, targetId: target.id, kind: 'plinker' });
       break;
     }
@@ -215,7 +219,7 @@ function fire(
       const hit = new Set<number>([target.id]);
       let current = target;
       let curDmg = dmg;
-      damageEnemy(state, current, curDmg);
+      tower.dmgDealt += damageEnemy(state, current, curDmg);
       for (let j = 1; j < maxTargets; j++) {
         let next: Enemy | null = null;
         let nd = Infinity;
@@ -231,7 +235,7 @@ function fire(
         }
         if (!next) break;
         curDmg *= falloff;
-        damageEnemy(state, next, curDmg);
+        tower.dmgDealt += damageEnemy(state, next, curDmg);
         state.events.push({ type: 'chain', fromId: current.id, toId: next.id });
         hit.add(next.id);
         current = next;
@@ -241,7 +245,7 @@ function fire(
 
     case 'cannon':
     case 'doom': {
-      damageEnemy(state, target, dmg);
+      tower.dmgDealt += damageEnemy(state, target, dmg);
       state.events.push({ type: 'shot', towerId: tower.id, targetId: target.id, kind: tower.kind });
       const r = stats.splash;
       if (r > 0) {
@@ -251,7 +255,7 @@ function fire(
           if (e.id === target.id) continue;
           const dx = e.x - tx;
           const dz = e.z - tz;
-          if (dx * dx + dz * dz <= r * r) damageEnemy(state, e, dmg);
+          if (dx * dx + dz * dz <= r * r) tower.dmgDealt += damageEnemy(state, e, dmg);
         }
         state.events.push({ type: 'aoe', x: tx, z: tz, radius: r, kind: tower.kind });
       }
@@ -268,7 +272,7 @@ function fire(
         const dx = e.x - tx;
         const dz = e.z - tz;
         if (dx * dx + dz * dz <= r * r) {
-          damageEnemy(state, e, dmg);
+          tower.dmgDealt += damageEnemy(state, e, dmg);
           applySlow(e, factor, duration);
         }
       }
@@ -416,6 +420,7 @@ export function placeTower(
     spdLevel: 0,
     cooldown: 0,
     spent: cost,
+    dmgDealt: 0,
   });
   return true;
 }

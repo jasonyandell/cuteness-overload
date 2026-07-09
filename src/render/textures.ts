@@ -77,6 +77,31 @@ export function makeFaceTexture(bodyColor: number): THREE.CanvasTexture {
   return tex;
 }
 
+/** A soft white heart on transparent bg, tinted per-sprite for death poofs. */
+export function makeHeartTexture(): THREE.CanvasTexture {
+  const s = 64;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const g = cv.getContext('2d')!;
+  g.fillStyle = '#ffffff';
+  g.translate(s / 2, s * 0.38);
+  g.scale(s / 32, s / 32);
+  // Two lobes + a point — a chunky cartoon heart.
+  g.beginPath();
+  g.moveTo(0, 6);
+  g.bezierCurveTo(0, 3, -4, -6, -11, -6);
+  g.bezierCurveTo(-20, -6, -20, 5, -20, 5);
+  g.bezierCurveTo(-20, 12, -12, 18, 0, 26);
+  g.bezierCurveTo(12, 18, 20, 12, 20, 5);
+  g.bezierCurveTo(20, 5, 20, -6, 11, -6);
+  g.bezierCurveTo(4, -6, 0, 3, 0, 6);
+  g.closePath();
+  g.fill();
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 /** Soft radial dot used for confetti / spark sprites. */
 export function makeDotTexture(): THREE.CanvasTexture {
   const s = 64;

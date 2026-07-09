@@ -29,6 +29,12 @@ export function readSave(): SaveBlob | null {
     if (!raw) return null;
     const blob = JSON.parse(raw) as SaveBlob;
     if (!blob || !blob.state || !blob.mapId) return null;
+    // Tolerate old saves predating per-tower damage tracking.
+    if (Array.isArray(blob.state.towers)) {
+      for (const t of blob.state.towers) {
+        if (typeof t.dmgDealt !== 'number') t.dmgDealt = 0;
+      }
+    }
     return blob;
   } catch {
     return null;

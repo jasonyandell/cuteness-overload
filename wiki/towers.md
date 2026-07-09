@@ -18,14 +18,17 @@ All stats live in `TOWERS` (`src/sim/constants.ts`); firing behavior is in
 
 | Kind | Name | Cost | Range | Damage | Rate | Special | Profile |
 |---|---|---|---|---|---|---|---|
-| `plinker` | Pebble Plinker | 20 | 2.9 | 6.5 | 1.6 | single target | Fast & cheap, **hard ceiling** |
-| `freeze` | Brr Blaster | 35 | 2.6 | 3 | 0.9 | splash 1.6, slow ×0.55 for 2.0s | Utility: slow zone |
+| `plinker` | Pebble Pal | 20 | 2.9 | 6.5 | 1.6 | single target | Fast & cheap, **hard ceiling** |
+| `freeze` | Brr-Buddy | 35 | 2.6 | 3 | 0.9 | splash 1.6, slow ×0.55 for 2.0s | Utility: slow zone |
 | `cannon` | Boop Cannon | 60 | 3.2 | 16 | 0.7 | splash 1.3 (full dmg) | Even damage on the field |
-| `lightning` | Zap Zapper | 90 | 3.4 | 14 | 1.0 | chains 4, falloff 0.72 | Damage down a chain |
-| `doom` | Snuggle Nuke | 240 | 3.8 | 90 | 0.26 | splash 2.4 (full dmg) | A ton of field damage — if you can afford it |
+| `lightning` | Zappy Tickler | 90 | 3.4 | 14 | 1.0 | chains 4, falloff 0.72 | Damage down a chain |
+| `doom` | Big Hug | 240 | 3.8 | 90 | 0.26 | splash 2.4 (full dmg) | A ton of field damage — if you can afford it |
 
-Display names/descriptions are the "cute" flavor text; the sim keys everything on
-the `TowerKind` string (`plinker | freeze | cannon | lightning | doom`).
+Display names/descriptions are "evil-cute" flavor text (passive-aggressively
+sweet — the doom tower is a "Big Hug" that nobody walks away from); the sim keys
+everything on the `TowerKind` string
+(`plinker | freeze | cannon | lightning | doom`), which never changes, so
+save/automation/AI compatibility is preserved.
 
 ### Firing details (from `fire()`)
 
@@ -38,6 +41,18 @@ the `TowerKind` string (`plinker | freeze | cannon | lightning | doom`).
   `FALLOFF_CAP = 0.9` via upgrades).
 - **freeze** damages *and* slows all enemies in radius; slow never stacks (keeps
   strongest factor + longest duration via `applySlow`).
+
+### Damage accounting (`Tower.dmgDealt`)
+
+Every tower carries `dmgDealt` (in `src/sim/types.ts`, init 0 in `placeTower`):
+the lifetime hp+shield it has **actually removed**. `damageEnemy()` returns the
+removed amount, capped at what the enemy had left (`min(amount, shield +
+max(0, hp))`), so overkill from splash/chain hitting an already-dying enemy never
+inflates the stat — a 6.5-dmg shot on a 2-hp enemy logs 2. Freeze's token damage
+counts too. It is pure accounting: firing behavior and outcomes are unchanged
+(the balance target-checks still pass). The UI shows total damage and
+damage-per-coin (`dmgDealt / spent`) in the tower panel. Old saves lacking the
+field are normalized to 0 on load (`readSave` in `src/ui/save.ts`).
 
 ## Upgrade system: per-tower tracks + the fairness contract
 

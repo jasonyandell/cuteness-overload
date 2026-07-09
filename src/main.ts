@@ -42,7 +42,7 @@ const TOWER_ICON: Record<TowerKind, string> = {
   freeze: '❄️',
   cannon: '💣',
   lightning: '⚡',
-  doom: '🌟',
+  doom: '🫂',
 };
 
 // Per-map flavour for the menu cards, keyed by map id (falls back to index order).
@@ -568,6 +568,9 @@ class App {
     const closeBtn = el('button', { class: 'btn tp-close' }, '✕') as HTMLButtonElement;
     closeBtn.addEventListener('click', () => this.closeTowerPanel());
 
+    // Geek stat: lifetime hugs delivered and hugs-per-coin.
+    const statsEl = el('div', { class: 'tp-stats' }, '');
+
     const panel = el(
       'div',
       { class: 'tower-panel' },
@@ -589,6 +592,7 @@ class App {
         el('div', { style: 'flex:1', class: 'upg-col' }, dmgBtn, dmgPips),
         el('div', { style: 'flex:1', class: 'upg-col' }, spdBtn, spdPips),
       ),
+      statsEl,
       el('div', { class: 'tp-foot' }, sellBtn),
     );
 
@@ -640,6 +644,10 @@ class App {
 
       const refund = Math.floor(t.spent * SELL_REFUND);
       sellBtn.textContent = `💰 Sell  +${refund} 🪙`;
+
+      const dmg = Math.round(t.dmgDealt);
+      const perCoin = t.spent > 0 ? (t.dmgDealt / t.spent).toFixed(1) : '0.0';
+      statsEl.textContent = `💥 ${dmg} hugs  ·  ${perCoin} / 🪙`;
     };
     this.panelUpdate();
   }
@@ -760,8 +768,8 @@ class App {
       { class: 'overlay' },
       this.confetti(),
       el('div', { class: 'big-face' }, '🎉'),
-      el('h2', {}, 'You saved the day!'),
-      el('p', { class: 'subtitle' }, 'the cuties are defeated (adorably) 💖'),
+      el('h2', {}, 'You survived the cuteness!'),
+      el('p', { class: 'subtitle' }, 'the cuties toddle home, still smiling… they will be back 💖'),
       this.statsChips(),
       el('div', { class: 'menu-actions' }, endlessBtn, menuBtn),
     );
@@ -782,9 +790,9 @@ class App {
     this.overlay = el(
       'div',
       { class: 'overlay' },
-      el('div', { class: 'big-face' }, '😿'),
-      el('h2', {}, 'They got in!'),
-      el('p', { class: 'subtitle' }, 'your home was overwhelmed by cuteness…'),
+      el('div', { class: 'big-face' }, '🥰'),
+      el('h2', {}, 'They loved you to pieces!'),
+      el('p', { class: 'subtitle' }, 'the cuties hugged your home to bits… so sweet of them 🫂💥'),
       this.statsChips(),
       el('div', { class: 'menu-actions' }, retryBtn, menuBtn),
     );
@@ -862,18 +870,20 @@ class App {
     if (wasPanning) return;
     if (!this.state || this.state.status !== 'playing') return;
 
-    if (this.armed) {
-      this.tryPlaceAt(e.clientX, e.clientY);
-      return;
-    }
-
+    // Clicking a cell with a tower ALWAYS selects it (and clears any build
+    // arming), even mid-placement — an existing tower wins over placement.
     const hex = this.renderer.pickHex(e.clientX, e.clientY);
     if (hex) {
       const t = this.towerAt(hex.q, hex.r);
       if (t) {
-        this.selectTower(t.id);
+        this.selectTower(t.id); // selectTower() disarms the build selection
         return;
       }
+    }
+
+    if (this.armed) {
+      this.tryPlaceAt(e.clientX, e.clientY);
+      return;
     }
     this.closeTowerPanel();
   }
@@ -939,7 +949,11 @@ class App {
       for (const ev of frameEvents) {
         if (ev.type === 'wave') {
           const boss = ev.wave === 10 || ev.wave === 20;
-          this.showToast(boss ? `Wave ${ev.wave} — BOSS! 👹` : `Wave ${ev.wave}! 🌸`);
+          this.showToast(
+            boss
+              ? `Wave ${ev.wave} — a BIG one wants a hug! 🫂`
+              : `Wave ${ev.wave} — here come the cuties! 🌸`,
+          );
         }
       }
 
