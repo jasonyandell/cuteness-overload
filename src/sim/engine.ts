@@ -17,17 +17,16 @@ import {
   FIRST_WAVE_DELAY,
   WAVE_INTERVAL,
   TOTAL_WAVES,
-  MAX_UPGRADE,
   SELL_REFUND,
-  DMG_MUL,
-  SPD_MUL,
   UPGRADE_BASE,
   UPGRADE_GROWTH,
+  towerStats,
   SKIP_RATE,
   SKIP_WAVE_SCALE,
   WAVE_INCOME_BASE,
   WAVE_INCOME_SCALE,
   HP_GROWTH,
+  BOSS_HP_GROWTH,
   ENDLESS_HP_GROWTH,
   BOUNTY_GROWTH,
   SHIELD_REGEN_DELAY,
@@ -129,7 +128,12 @@ function callWave(state: GameState, map: MapDef): void {
 function spawnEnemy(state: GameState, map: MapDef, item: SpawnItem): void {
   const spec = ENEMIES[item.kind];
   const w = item.wave;
-  let scale = map.hpMul * Math.pow(HP_GROWTH, w - 1);
+  // Bosses use their own gentler curve and ignore the map's hpMul: map
+  // difficulty lives in the trash waves; the boss-wall climax is the same
+  // save-up test everywhere (and stays beatable on the harder maps).
+  const boss = item.kind === 'boss';
+  const growth = boss ? BOSS_HP_GROWTH : HP_GROWTH;
+  let scale = (boss ? 1 : map.hpMul) * Math.pow(growth, w - 1);
   if (w > 20) scale *= Math.pow(ENDLESS_HP_GROWTH, w - 20);
 
   const hp = spec.hp * scale;
@@ -192,9 +196,10 @@ function fire(
   state: GameState,
   tower: Tower,
   spec: TowerSpec,
+  stats: ReturnType<typeof towerStats>,
   target: Enemy,
 ): void {
-  const dmg = spec.damage * Math.pow(DMG_MUL, tower.dmgLevel);
+  const dmg = stats.damage;
 
   switch (tower.kind) {
     case 'plinker': {
@@ -205,8 +210,8 @@ function fire(
 
     case 'lightning': {
       state.events.push({ type: 'shot', towerId: tower.id, targetId: target.id, kind: 'lightning' });
-      const maxTargets = spec.chains ?? 1;
-      const falloff = spec.chainFalloff ?? 1;
+      const maxTargets = stats.chains;
+      const falloff = stats.falloff;
       const hit = new Set<number>([target.id]);
       let current = target;
       let curDmg = dmg;
@@ -238,7 +243,7 @@ function fire(
     case 'doom': {
       damageEnemy(state, target, dmg);
       state.events.push({ type: 'shot', towerId: tower.id, targetId: target.id, kind: tower.kind });
-      const r = spec.splash ?? 0;
+      const r = stats.splash;
       if (r > 0) {
         const tx = target.x;
         const tz = target.z;
@@ -254,7 +259,7 @@ function fire(
     }
 
     case 'freeze': {
-      const r = spec.splash ?? 0;
+      const r = stats.splash;
       const tx = target.x;
       const tz = target.z;
       const factor = spec.slowFactor ?? 1;
@@ -323,8 +328,9 @@ export function step(state: GameState, map: MapDef): void {
       continue;
     }
     const spec = TOWERS[tower.kind];
+    const stats = towerStats(tower);
     const tw = hexToWorld(tower.q, tower.r);
-    const r2 = spec.range * spec.range;
+    const r2 = stats.range * stats.range;
     let target: Enemy | null = null;
     let best = -1;
     for (const e of state.enemies) {
@@ -336,9 +342,8 @@ export function step(state: GameState, map: MapDef): void {
       }
     }
     if (!target) continue;
-    fire(state, tower, spec, target);
-    const rate = spec.rate * Math.pow(SPD_MUL, tower.spdLevel);
-    tower.cooldown = 1 / rate;
+    fire(state, tower, spec, stats, target);
+    tower.cooldown = 1 / stats.rate;
   }
 
   // (5) reap dead (bounty) and leaked (lives)
@@ -417,7 +422,7 @@ export function placeTower(
 
 export function upgradeCost(tower: Tower, which: 'dmg' | 'spd'): number | null {
   const level = which === 'dmg' ? tower.dmgLevel : tower.spdLevel;
-  if (level >= MAX_UPGRADE) return null;
+  if (level >= TOWERS[tower.kind].tracks[which].max) return null;
   return Math.round(TOWERS[tower.kind].cost * UPGRADE_BASE * Math.pow(UPGRADE_GROWTH, level));
 }
 

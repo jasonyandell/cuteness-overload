@@ -1,6 +1,6 @@
 ---
 tags: [sim, engine, mechanics]
-updated: 2026-07-07
+updated: 2026-07-08
 source-files:
   - src/sim/engine.ts
   - src/sim/types.ts
@@ -43,15 +43,16 @@ bounty lands the same tick).
 
 ## Targeting
 
-Each tower scans all enemies within `range` (squared-distance test against
-`hexToWorld(tower.q, tower.r)`) and picks the one **furthest along its path**
-(`e.dist > best`). This is a "first / leading" targeting policy — towers commit
-fire to whatever is closest to your house, concentrating damage on the biggest
-threat. There is no manual targeting.
+Each tower scans all enemies within its **effective range** (squared-distance
+test against `hexToWorld(tower.q, tower.r)`; range can grow with upgrades) and
+picks the one **furthest along its path** (`e.dist > best`). This is a "first /
+leading" targeting policy — towers commit fire to whatever is closest to your
+house, concentrating damage on the biggest threat. There is no manual targeting.
 
-Cooldown: after firing, `cooldown = 1 / (rate * SPD_MUL^spdLevel)`. While
-`cooldown > 0` it decrements by `TICK` and the tower skips. See [[towers]] for
-per-tower rates and the upgrade math.
+All effective stats (damage, rate, range, splash, chain falloff) come from one
+helper, `towerStats(tower)` in `src/sim/constants.ts`, which applies both
+per-tower upgrade tracks (see [[towers]]). Cooldown after firing:
+`cooldown = 1 / stats.rate`.
 
 ## Damage & shield model
 
@@ -74,8 +75,9 @@ fire keeps a Shelly's shield suppressed; sporadic fire lets it heal back.
   splash damage to every enemy within `splash` world units. Emits an `aoe` event.
 - **lightning** — hits the target, then chains to up to `chains` total enemies.
   Each jump finds the nearest unhit enemy within **2.2 world units** (hardcoded
-  chain radius in `engine.ts`) and multiplies damage by `chainFalloff` (0.72) per
-  hop. Emits `chain` events.
+  chain radius in `engine.ts`) and multiplies damage by the effective falloff
+  (base 0.72; `dmg` upgrades add +0.03/level up to `FALLOFF_CAP = 0.9`) per hop.
+  Emits `chain` events.
 - **freeze** — no single target; damages *and* slows every enemy within `splash`.
   `applySlow` never stacks: it keeps the **strongest** factor (lowest multiplier)
   and the **longest** remaining duration. Emits an `aoe` event.
@@ -84,8 +86,9 @@ fire keeps a Shelly's shield suppressed; sporadic fire lets it heal back.
 > — `DESIGN.md` describes doom as a "slow AoE," which the code does not implement;
 > "slow" refers to its slow *firing rate*. Tracked in [[lint]].
 
-Base damage scales with upgrades: `dmg = spec.damage * DMG_MUL^dmgLevel`
-(`DMG_MUL = 1.45`). See [[towers]].
+Damage, splash radius, and falloff in `fire()` are all the `towerStats(tower)`
+effective values — what each upgrade track grows is per tower (e.g. the freeze
+tower's `dmg` track grows range/area, not damage). See [[towers]].
 
 ## Enemy motion & path geometry
 

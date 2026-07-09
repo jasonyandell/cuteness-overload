@@ -1,6 +1,6 @@
 ---
 tags: [sim, waves, economy, balance]
-updated: 2026-07-07
+updated: 2026-07-08
 source-files:
   - src/sim/waves.ts
   - src/sim/constants.ts
@@ -102,16 +102,17 @@ final wave (`wave >= waveLimit`).
 
 The numbers are tuned so **patience pays**:
 
-- HP compounds at 1.22×/wave; bounty only 1.045×/wave. Kills alone never keep up.
+- Trash HP compounds at 1.22×/wave (bosses 1.16×, see [[enemies]]); bounty only
+  1.045×/wave. Kills alone never keep up.
 - Wave income + generous skip bonuses reward banking money and calling waves on
   your schedule rather than reacting.
 - The banked money is meant to buy **premium AoE/nuke towers** ([[towers|cannon,
   lightning, doom]]), which out-scale a pile of cheap plinkers against the late
   swarms and bosses.
 
-This is exactly what the [[balance]] harness verifies: a saver wins all maps; an
-impatient spender loses. The mid-game spikes (fast swarms at 7/12/17, double
-shields at 13/16) are the levers that punish single-target plinker-spam
-specifically — and the noted lever to pull if the spender needs to lose earlier
-(see [[balance]] "known deviation").
+This is exactly what the [[balance]] harness verifies: a saver **aces** all maps
+(20 lives kept); an impatient spender loses everywhere. The mid-game spikes
+(fast swarms at 7/12/17, double shields at 13/16) plus the plinker's hard
+upgrade ceiling ([[towers]]) are what punish single-target plinker-spam
+specifically.
 </content>

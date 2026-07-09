@@ -19,10 +19,8 @@ import {
   TOWERS,
   SKIP_RATE,
   SKIP_WAVE_SCALE,
-  DMG_MUL,
-  SPD_MUL,
-  MAX_UPGRADE,
   SELL_REFUND,
+  towerStats,
 } from './sim/constants';
 import { hexToWorld } from './sim/hex';
 import type { GameState, MapDef, TowerKind, Tower, SimEvent } from './sim/types';
@@ -54,9 +52,6 @@ const MAP_META: Record<string, { emoji: string; hint: string }> = {
   double: { emoji: '🔀', hint: 'two paths, one home' },
 };
 const FALLBACK_EMOJI = ['🌸', '🏞️', '🔀'];
-
-const DMG_PCT = Math.round((DMG_MUL - 1) * 100); // 45
-const SPD_PCT = Math.round((SPD_MUL - 1) * 100); // 30
 
 const SAVE_INTERVAL = 5; // seconds of sim/real time between autosaves
 
@@ -511,7 +506,7 @@ class App {
     show(this.buildbar, false);
     this.buildTowerPanel(id);
     const { x, z } = hexToWorld(tower.q, tower.r);
-    this.renderer.showRange(x, z, TOWERS[tower.kind].range);
+    this.renderer.showRange(x, z, towerStats(tower).range);
   }
 
   private closeTowerPanel() {
@@ -537,11 +532,14 @@ class App {
     const dmgCostEl = el('div', { class: 'pcost' }, '');
     const spdCostEl = el('div', { class: 'pcost' }, '');
 
+    const dmgTrack = spec.tracks.dmg;
+    const spdTrack = spec.tracks.spd;
+
     const dmgBtn = el(
       'button',
       { class: 'btn btn-danger upg-btn' },
-      el('div', { class: 'lab' }, '⚔️ Damage'),
-      el('div', { class: 'amt' }, `+${DMG_PCT}% dmg`),
+      el('div', { class: 'lab' }, dmgTrack.label),
+      el('div', { class: 'amt' }, dmgTrack.blurb),
       dmgCostEl,
     ) as HTMLButtonElement;
     dmgBtn.addEventListener('click', () => {
@@ -551,8 +549,8 @@ class App {
     const spdBtn = el(
       'button',
       { class: 'btn btn-mint upg-btn' },
-      el('div', { class: 'lab' }, '⚡ Speed'),
-      el('div', { class: 'amt' }, `+${SPD_PCT}% spd`),
+      el('div', { class: 'lab' }, spdTrack.label),
+      el('div', { class: 'amt' }, spdTrack.blurb),
       spdCostEl,
     ) as HTMLButtonElement;
     spdBtn.addEventListener('click', () => {
@@ -607,9 +605,9 @@ class App {
     this.towerPanel = panel;
     this.hudScreen.append(panel);
 
-    const renderPips = (container: HTMLElement, level: number) => {
+    const renderPips = (container: HTMLElement, level: number, max: number) => {
       clear(container);
-      for (let i = 0; i < MAX_UPGRADE; i++) {
+      for (let i = 0; i < max; i++) {
         container.append(el('div', { class: 'pip' + (i < level ? ' on' : '') }));
       }
     };
@@ -620,8 +618,8 @@ class App {
         this.closeTowerPanel();
         return;
       }
-      renderPips(dmgPips, t.dmgLevel);
-      renderPips(spdPips, t.spdLevel);
+      renderPips(dmgPips, t.dmgLevel, dmgTrack.max);
+      renderPips(spdPips, t.spdLevel, spdTrack.max);
 
       const dc = upgradeCost(t, 'dmg');
       if (dc === null) {
@@ -649,6 +647,14 @@ class App {
   private refreshBuildAndPanel() {
     this.updateHud();
     this.panelUpdate?.();
+    // upgrades can grow range — keep the selected tower's range ring honest
+    if (this.selectedTowerId !== null) {
+      const t = this.towerById(this.selectedTowerId);
+      if (t) {
+        const { x, z } = hexToWorld(t.q, t.r);
+        this.renderer.showRange(x, z, towerStats(t).range);
+      }
+    }
   }
 
   // ---------------------------------------------------------------- overlays

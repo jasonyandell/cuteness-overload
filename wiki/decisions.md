@@ -1,6 +1,6 @@
 ---
 tags: [decisions, adr, rationale]
-updated: 2026-07-07
+updated: 2026-07-08
 source-files:
   - src/sim/engine.ts
   - src/sim/rng.ts
@@ -117,3 +117,28 @@ matches the sim. The policy is **duplicated** between `ai-play.ts` and
 `remote-play.ts` (local sim vs `window.__game`) — a conscious copy that must be
 kept in sync. See [[ai-tester]].
 </content>
+
+## D12 — Upgrade fairness contract (per-tower tracks)
+
+**Decision:** upgrades are priced so marginal **delivered damage per coin** stays
+roughly flat (`UPGRADE_BASE 0.55`, `UPGRADE_GROWTH 1.5`, per-tower value
+multipliers ≈ the cost growth; `TowerSpec.tracks` + `towerStats()` replace the
+global `DMG_MUL`/`SPD_MUL`). Each tower keeps a unique profile: plinker is capped
+at 2 levels/track, the freeze "dmg" track grows range/area instead of damage,
+cannon/doom widen their splash, lightning improves chain falloff.
+**Why (owner directive, 2026-07-08):** "if the game is charging you more, you can
+trust it's worth it." The old flat-%-vs-1.6×-cost exponential decayed to ~0.35
+marginal value per coin. A mild taper (~0.67–0.9) is deliberate — one strong tower
+also enjoys positional advantage. Enforced by `scripts/fairness.ts`. See
+[[towers]], [[balance]].
+
+## D13 — Bosses scale on their own curve, exempt from map hpMul
+
+**Decision:** `BOSS_HP_GROWTH = 1.16` (trash keeps `HP_GROWTH = 1.22`) and bosses
+ignore `map.hpMul` (`spawnEnemy`).
+**Why:** the wave-20 double-Chonk wall on the shared curve cost more delivered
+damage than a full game's economy could buy — unaceable even with perfect saving —
+and map hpMul made harder maps' climaxes disproportionately worse. Map difficulty
+lives in the trash waves; the boss wall is the same save-up climax everywhere,
+aceable by the [[ai-tester|saver]]'s boss-fund plan while plinker-spam still
+collapses. See [[enemies]], [[balance]].

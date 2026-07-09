@@ -1,6 +1,6 @@
 ---
 tags: [lint, drift, findings]
-updated: 2026-07-07
+updated: 2026-07-08
 source-files:
   - DESIGN.md
   - BALANCE.md
@@ -30,6 +30,24 @@ The saver strategy (`SAVER_LIST`, `coverageScore`, `bestCell`, `shouldSkip`,
 hand; a change to one silently diverges the other. Not a bug today (they match),
 but a standing hazard. **Fix candidate:** extract the shared policy into a module
 both import. See [[ai-tester]], [[decisions]] D11.
+
+### L7 — remote-play.ts runs the pre-rebalance saver policy  (open)
+
+The 2026-07-08 fairness rebalance upgraded `scripts/ai-play.ts`'s saver (boss
+fund, boss-mode dump, per-map `SAVER_PROFILES`, second doom, `towerValue`), but
+`scripts/remote-play.ts` still carries the old ported list/tail. Verified 2026-07-08:
+the old policy **still wins** on current constants (headless equivalent: wins all
+maps, 10–20 lives), so remote verification remains sound — it just won't
+reproduce the ace results. This sharpens the L4 duplication hazard. **Fix
+candidate:** extract the shared policy module (L4) or re-port. See [[ai-tester]].
+
+### L8 — BALANCE.md and DESIGN.md predate the fairness rebalance  (open, owner: team-lead)
+
+Both raw docs describe the old upgrade system (global +45%/+30% multipliers,
+`UPGRADE_GROWTH 1.6`, plinker 5 upgrade levels, doom-rate story, shared boss HP
+curve) and BALANCE.md's tables/narrative no longer match `scripts/balance.ts`
+output. The wiki ([[towers]], [[balance]], [[enemies]]) is current; treat the raw
+docs as historical until rewritten.
 
 ### L6 — DESIGN.md Theme paragraph still says "pastel"  (open, owner: team-lead)
 

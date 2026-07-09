@@ -1,6 +1,6 @@
 ---
 tags: [render, threejs, performance]
-updated: 2026-07-07
+updated: 2026-07-08
 source-files:
   - src/render/renderer.ts
   - src/render/effects.ts
@@ -41,6 +41,16 @@ Target: 60fps on mid phones. Everything drawn in bulk is an `InstancedMesh`:
   size) and sets `mesh.count`. Animation details below.
 - **Shield bubbles** — a shared instanced translucent sphere, one per live Shelly
   with shield, scaled by remaining shield fraction.
+- **Health bars** — two `InstancedMesh` planes (dark backdrop + colored fill,
+  `renderOrder` 998/999, `depthTest` off) shown over **every enemy below full
+  hp** (added 2026-07-08). Billboarded by copying the camera quaternion into the
+  instance matrix each frame. The fill plane's geometry is translated so its
+  origin is the **left edge**; per instance it is positioned half a bar-width
+  left along the billboard's local x and `scale.x = hpFrac × width`, so the bar
+  drains rightward. Fill color lerps green→red via `setColorAt`
+  (`setRGB(1 − f·0.7, 0.4 + f·0.5, 0.35)`). Bar width is `radius × 1.15`
+  (boss: 1.9, raised higher). This replaced the old boss-only `THREE.Group`
+  hp-bar pool.
 
 Towers are **not** instanced — they're small `THREE.Group`s of primitives rebuilt
 only when the tower set/levels change (guarded by `towerHashOf`, a hash of

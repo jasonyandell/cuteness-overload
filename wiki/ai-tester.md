@@ -1,9 +1,10 @@
 ---
 tags: [ai, testing, automation, scripts]
-updated: 2026-07-07
+updated: 2026-07-08
 source-files:
   - scripts/ai-play.ts
   - scripts/balance.ts
+  - scripts/fairness.ts
   - scripts/remote-play.ts
   - src/sim/engine.ts
 ---
@@ -38,23 +39,45 @@ count a little extra). `bestCell(kind)` picks the free build cell with the highe
 coverage for that tower's range. This is how the AI "aims" — it places where a
 tower covers the most path.
 
-### The saver (intended winner)
+### The saver (intended winner — it ACES)
 
-A **fixed shopping list** (`SAVER_LIST`) executed strictly in order; each step only
-fires when affordable — never buys ahead, never substitutes. The list:
+A **fixed opening list** (`SAVER_OPENING`) executed strictly in order; each step
+only fires when affordable — never buys ahead, never substitutes:
 
 ```
 plinker, plinker, cannon, up(cannon,dmg), freeze, cannon, lightning,
-up(cannon,dmg), plinker, up(cannon2,dmg), doom, up(doom,dmg)
+up(cannon,dmg), plinker, up(cannon2,dmg), doom, up(doom,dmg), up(doom,spd)
 ```
 
-That is the "saving discipline": the big towers (cannon → lightning → **doom**)
-are earned in order, not replaced by cheap plinkers. Doom is the payoff purchase.
-After the list, a **value-greedy tail** (`tailUpgrade`) spends pooled money on the
-best DPS-per-dollar action — an upgrade on an existing tower or a new
-cannon/lightning/doom in the best free spot (never more plinkers). `towerDps`
-estimates throughput with crude AoE/chain multipliers so splash towers aren't
-undervalued.
+On multi-lane maps a `SECOND_DOOM` extension appends `doom, up(dmg), up(spd)` —
+one doom per lane's wave-20 boss. After the list, a **value-greedy tail**
+(`tailUpgrade`) spends pooled money on the best marginal
+**delivered-damage-per-dollar** action (`towerValue` = `towerStats` damage ×
+rate × expected targets × range — the same fairness metric as
+`scripts/fairness.ts`) — an upgrade or a new cannon/lightning/doom in the best
+free spot (never more plinkers).
+
+**The boss fund (the ace-maker).** From `cfg.bankStart` the saver banks its
+overflow instead of spending; at `cfg.dumpWave` it dumps the whole fund into
+instant upgrades scored in **boss mode** (`bossTargetsPerShot`: does the splash
+span the two Chonks walking ~1.7u apart? do chains reach the second boss?),
+falling back to general value so money never rots. Banking is optionally
+**threat-aware** (`cfg.margin`): keep spending while `teamDps×18 <
+margin × next wave's hp` (`waveThreat`), bank only when comfortably ahead.
+
+**Per-map game plan** (`SAVER_PROFILES`, applied by `playGame`):
+
+| map | bankStart | dumpWave | margin | secondDoom |
+|---|---|---|---|---|
+| meadow | 14 | 18 | 0 (pure bank) | no |
+| creek | 12 | 17 | 0 | no |
+| double | 12 | 17 | 1.6 (threat-aware) | yes |
+
+These settings **ace (20 lives) every map × seeds 1–5** at current constants —
+the proof that acing needs a smart plan, not superhuman play. The knobs are
+exported (`SAVER_CFG`, `opts.cfg`) so sweeps can re-tune after any rebalance.
+The per-wave log also prints `!! boss leaked at wN with X hp` lines and a final
+per-tower `LOADOUT` for post-mortems.
 
 ### The spender (baseline that loses)
 
@@ -73,28 +96,38 @@ immediately re-spends the bonus.
 
 ## `scripts/balance.ts` — the sweep
 
-Runs saver + spender across all 3 maps × seeds 1–5 (30 games, <1s total), prints a
-detailed table, a per-map summary (win rate / avg wave / avg & min lives), and a
-**target check**. Targets: `saver wins all` PASS, `spender loses all` PASS.
-
-> Caveat: the third assertion, `spender losses in wave 8-18 window`, currently
-> prints **FAIL** because Meadow/Creek spenders die at wave 20 — which is the
-> accepted behavior documented in [[balance]]. The assertion window contradicts the
-> accepted reality; tracked in [[lint]].
+Runs saver + spender across all 3 maps × seeds 1–5 (30 games), prints a detailed
+table, a per-map summary (win rate / avg wave / avg & min lives), and a **target
+check**: saver wins all, saver **ACES** all (20 lives kept), spender loses all,
+spender losses inside waves 8–20. All four PASS at current constants
+([[balance]]).
 
 ```
 npx tsx scripts/balance.ts     # or: npm run balance
 npm run ai                     # ai-play with defaults
 ```
 
+## `scripts/fairness.ts` — the upgrade fairness report
+
+Prints, per tower and per upgrade track, the **marginal and cumulative
+delivered-damage per coin** for every level, normalized so the base tower =
+1.00. Delivered damage = damage × rate × expected targets × time-in-range for an
+average mob stream crossing the tower's range in a straight line (density
+0.8/unit, tower ~1.7u off the path). This is the executable form of the fairness
+contract in [[towers]] — after any constants change, re-run it and check the
+marginal column stays roughly flat (~0.67–0.9; freeze's range track is exempt,
+its value is the slow).
+
 ## `scripts/remote-play.ts` — driving the deployed site
 
-Plays the **live site** in a real headless Chromium (Playwright) using the *same*
-saver policy, but every decision is executed through the page's
-[[ui-flow|`window.__game.actions`]] surface instead of a local sim. The policy
-(coverage scoring, `SAVER_LIST`, skip heuristic) is a **faithful port** of
-`ai-play.ts`; it runs in Node against state polled out of the browser each loop
+Plays the **live site** in a real headless Chromium (Playwright), every decision
+executed through the page's [[ui-flow|`window.__game.actions`]] surface instead
+of a local sim, against state polled out of the browser each loop
 (`JSON.parse(JSON.stringify(__game.state))`).
+
+> ⚠ Its policy is a port of the **pre-rebalance** saver (old list, no boss
+> fund/profiles). It still wins on current constants but won't reproduce the
+> ace results; tracked in [[lint]] L7.
 
 ```
 npx tsx scripts/remote-play.ts [url] [mapId] [seed]

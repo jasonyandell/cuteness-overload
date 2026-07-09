@@ -85,3 +85,40 @@ re-verified). New open **L6**: DESIGN.md line 41 Theme paragraph still says
 doesn't own). L4 (saver policy duplicated across ai-play/remote-play) remains open.
 Updated [[index]] one-liners for rendering/ui-flow/lint.
 </content>
+
+## [2026-07-08] ingest | Fairness rebalance + boss curve + saver-aces AI + enemy health bars
+
+Owner directive: upgrade pricing must be *fair* — "spend more, get more," with
+"more" measured as delivered damage to an average mob stream crossing the
+tower's range; every tower gets a unique profile; a reasonably smart heuristic
+AI must be able to ACE (20 hearts) the levels; plinker-spam must not win; and
+all under-full-health enemies get little health bars.
+
+Code changes ingested:
+
+- `src/sim/types.ts` / `src/sim/constants.ts`: per-tower upgrade tracks
+  (`UpgradeTrack`, `TowerSpec.tracks`, `towerStats()`); removed global
+  `DMG_MUL`/`SPD_MUL`/`MAX_UPGRADE`; `UPGRADE_BASE 0.75→0.55`,
+  `UPGRADE_GROWTH 1.6→1.5`; plinker damage 7→6.5 and capped at 2 levels/track;
+  freeze "dmg" track now grows range/area; cannon/doom splash growth; lightning
+  falloff growth (`FALLOFF_CAP 0.9`); `BOSS_HP_GROWTH = 1.16`.
+- `src/sim/engine.ts`: `fire()`/targeting/cooldown read `towerStats`;
+  `upgradeCost` per-track max; bosses scale on `BOSS_HP_GROWTH` and ignore
+  `map.hpMul`.
+- `scripts/fairness.ts` (new): delivered-damage-per-coin report.
+- `scripts/ai-play.ts`: `towerValue` fairness metric, boss fund
+  (bank→dump), boss-mode scoring, threat-aware banking, `SAVER_PROFILES`
+  per map, `SECOND_DOOM` for multi-lane, boss-leak + loadout logging.
+- `scripts/balance.ts`: new target "saver ACES all" — all four targets PASS
+  (saver 20 lives on all 3 maps × 5 seeds; spender 0/15 wins).
+- `src/render/renderer.ts`: instanced health bars over every damaged enemy
+  (replaces boss-only pool). Verified visually via Playwright on the dev build.
+- `src/main.ts`: tower panel reads per-track labels/blurbs/max pips; range ring
+  reflects upgraded range.
+
+Pages updated: [[towers]] (rewrite of upgrade system + stat table),
+[[sim-engine]], [[enemies]], [[waves-economy]], [[balance]] (rewrite),
+[[ai-tester]], [[rendering]], [[decisions]] (new D12 fairness contract, D13
+boss curve), [[index]] one-liners. Lint: opened **L7** (remote-play runs the
+pre-rebalance policy — verified it still wins) and **L8** (BALANCE.md/DESIGN.md
+now historical re: upgrades); see [[lint]].

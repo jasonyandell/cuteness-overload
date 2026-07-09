@@ -21,18 +21,48 @@ export interface MapDef {
 export type TowerKind = 'plinker' | 'freeze' | 'cannon' | 'lightning' | 'doom';
 export type EnemyKind = 'regular' | 'fast' | 'shield' | 'boss';
 
+/**
+ * One upgrade track. Each level multiplies the listed stats (compounding).
+ * Cost of level n (0-based current level): round(cost * UPGRADE_BASE * UPGRADE_GROWTH^n).
+ * Fairness contract (see scripts/fairness.ts): the per-level product of the
+ * multipliers, measured in delivered damage (damage x rate x targets x range),
+ * should roughly match UPGRADE_GROWTH so money spent is money earned.
+ */
+export interface UpgradeTrack {
+  label: string;      // UI button label, e.g. '⚔️ Damage'
+  blurb: string;      // UI one-liner, e.g. '+40% dmg'
+  max: number;        // levels available on this track
+  dmgMul?: number;    // per-level damage multiplier
+  rateMul?: number;   // per-level fire-rate multiplier
+  rangeMul?: number;  // per-level range multiplier
+  splashMul?: number; // per-level splash-radius multiplier
+  falloffAdd?: number; // lightning: per-level chain falloff improvement (additive)
+}
+
 export interface TowerSpec {
   name: string;       // cute display name
   cost: number;
   range: number;      // world units (hex size = 1, center-to-center dist = ~1.732)
   damage: number;     // base damage per shot
   rate: number;       // shots per second (base)
-  splash?: number;    // cannon/doom: splash radius in world units
+  splash?: number;    // cannon/doom/freeze: splash radius in world units
   chains?: number;    // lightning: max total targets hit
   chainFalloff?: number; // damage multiplier per jump
   slowFactor?: number;   // freeze: speed multiplier applied to targets
   slowDuration?: number; // freeze: seconds of slow
+  /** The two upgrade tracks, keyed by the Tower fields they level ('dmg'/'spd'). */
+  tracks: { dmg: UpgradeTrack; spd: UpgradeTrack };
   desc: string;
+}
+
+/** Effective combat stats of a tower after applying both upgrade tracks. */
+export interface TowerStats {
+  damage: number;
+  rate: number;
+  range: number;
+  splash: number;   // 0 when the tower has no splash
+  falloff: number;  // 1 when the tower has no chains
+  chains: number;
 }
 
 export interface EnemySpec {
@@ -49,8 +79,8 @@ export interface Tower {
   kind: TowerKind;
   q: number;
   r: number;
-  dmgLevel: number;   // 0..MAX_UPGRADE
-  spdLevel: number;   // 0..MAX_UPGRADE
+  dmgLevel: number;   // 0..tracks.dmg.max for this tower kind
+  spdLevel: number;   // 0..tracks.spd.max for this tower kind
   cooldown: number;   // seconds until next shot
   spent: number;      // total money invested (for sell refund)
 }

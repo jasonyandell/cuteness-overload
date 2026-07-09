@@ -40,11 +40,6 @@ interface EnemyMesh {
   hopHeight: number; // hop amplitude (world units)
 }
 
-interface HpBar {
-  group: THREE.Group;
-  fill: THREE.Mesh;
-  mat: THREE.MeshBasicMaterial;
-}
 
 export class GameRenderer {
   private canvas: HTMLCanvasElement;
@@ -68,7 +63,10 @@ export class GameRenderer {
   private enemyMeshes: Record<EnemyKind, EnemyMesh>;
   private faceTextures: THREE.CanvasTexture[] = [];
   private shieldBubble: THREE.InstancedMesh;
-  private hpBars: HpBar[] = [];
+  // Health bars: instanced billboard pair (backdrop + left-anchored fill) shown
+  // over every enemy that is below full health.
+  private hpBarBg: THREE.InstancedMesh;
+  private hpBarFill: THREE.InstancedMesh;
 
   // Towers (rebuilt on change, keyed by a levels hash).
   private towerGroup = new THREE.Group();
@@ -156,8 +154,29 @@ export class GameRenderer {
     this.shieldBubble.frustumCulled = false;
     this.scene.add(this.shieldBubble);
 
-    // Boss hp bars (small billboard pool).
-    for (let i = 0; i < 4; i++) this.hpBars.push(this.buildHpBar());
+    // Health bars for damaged enemies (instanced, drawn over everything).
+    const barBgGeo = new THREE.PlaneGeometry(1, 0.14);
+    const barBgMat = new THREE.MeshBasicMaterial({
+      color: 0x33323a, depthTest: false, depthWrite: false, transparent: true, opacity: 0.85,
+    });
+    this.hpBarBg = new THREE.InstancedMesh(barBgGeo, barBgMat, ENEMY_CAP);
+    this.hpBarBg.count = 0;
+    this.hpBarBg.frustumCulled = false;
+    this.hpBarBg.renderOrder = 998;
+    this.scene.add(this.hpBarBg);
+
+    // Fill plane spans x in [0,1] (left edge at origin) so scale.x = hp fraction
+    // grows rightward; nudged toward the camera to sit on top of the backdrop.
+    const barFillGeo = new THREE.PlaneGeometry(1, 0.09);
+    barFillGeo.translate(0.5, 0, 0.01);
+    const barFillMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff, depthTest: false, depthWrite: false, transparent: true,
+    });
+    this.hpBarFill = new THREE.InstancedMesh(barFillGeo, barFillMat, ENEMY_CAP);
+    this.hpBarFill.count = 0;
+    this.hpBarFill.frustumCulled = false;
+    this.hpBarFill.renderOrder = 999;
+    this.scene.add(this.hpBarFill);
 
     // Placement range disc.
     const discGeo = new THREE.CircleGeometry(1, 40);
@@ -195,23 +214,6 @@ export class GameRenderer {
     mesh.frustumCulled = false;
     this.scene.add(mesh);
     return { mesh, y, radius, hopFreq, hopHeight };
-  }
-
-  private buildHpBar(): HpBar {
-    const group = new THREE.Group();
-    const bgGeo = new THREE.PlaneGeometry(1.25, 0.16);
-    const bg = new THREE.Mesh(bgGeo, new THREE.MeshBasicMaterial({ color: 0x33323a, depthTest: false, transparent: true }));
-    bg.renderOrder = 998;
-    const fillGeo = new THREE.PlaneGeometry(1.2, 0.11);
-    fillGeo.translate(0.6, 0, 0.001); // pivot at left edge so scale.x grows rightward
-    const mat = new THREE.MeshBasicMaterial({ color: 0x7be08a, depthTest: false, transparent: true });
-    const fill = new THREE.Mesh(fillGeo, mat);
-    fill.position.x = -0.6;
-    fill.renderOrder = 999;
-    group.add(bg, fill);
-    group.visible = false;
-    this.scene.add(group);
-    return { group, fill, mat };
   }
 
   // ---- map -----------------------------------------------------------------
@@ -542,14 +544,29 @@ export class GameRenderer {
         this.shieldBubble.setMatrixAt(bubbleCount++, this.dummy.matrix);
       }
 
-      // Boss hp bar billboard.
-      if (e.kind === 'boss' && barIdx < this.hpBars.length) {
-        const bar = this.hpBars[barIdx++];
-        bar.group.visible = true;
-        bar.group.position.set(e.x, em.y + em.radius + 0.9 + hopY, e.z);
-        bar.group.quaternion.copy(this.camera.quaternion);
-        bar.fill.scale.x = Math.max(0.001, hpFrac);
-        bar.mat.color.setRGB(1 - hpFrac * 0.7, 0.4 + hpFrac * 0.5, 0.35);
+      // Health bar billboard over any cutie that has taken damage.
+      if (e.hp < e.maxHp && barIdx < ENEMY_CAP) {
+        const w = e.kind === 'boss' ? 1.9 : em.radius * 1.15;
+        const y = em.y + em.radius + (e.kind === 'boss' ? 0.9 : 0.35) + hopY;
+
+        this.dummy.position.set(e.x, y, e.z);
+        this.dummy.quaternion.copy(this.camera.quaternion);
+        this.dummy.scale.set(w, 1, 1);
+        this.dummy.updateMatrix();
+        this.hpBarBg.setMatrixAt(barIdx, this.dummy.matrix);
+
+        // Fill is left-anchored: shift its origin half a bar to the left along
+        // the billboard's local x, then scale by the hp fraction.
+        this.tmpVec3.set(-w / 2, 0, 0).applyQuaternion(this.camera.quaternion);
+        this.dummy.position.set(e.x + this.tmpVec3.x, y + this.tmpVec3.y, e.z + this.tmpVec3.z);
+        this.dummy.scale.set(Math.max(0.001, hpFrac) * w, 1, 1);
+        this.dummy.updateMatrix();
+        this.hpBarFill.setMatrixAt(barIdx, this.dummy.matrix);
+        this.hpBarFill.setColorAt(
+          barIdx,
+          this.tmpColor.setRGB(1 - hpFrac * 0.7, 0.4 + hpFrac * 0.5, 0.35),
+        );
+        barIdx++;
       }
     }
 
@@ -560,7 +577,11 @@ export class GameRenderer {
     });
     this.shieldBubble.count = bubbleCount;
     this.shieldBubble.instanceMatrix.needsUpdate = true;
-    for (let i = barIdx; i < this.hpBars.length; i++) this.hpBars[i].group.visible = false;
+    this.hpBarBg.count = barIdx;
+    this.hpBarBg.instanceMatrix.needsUpdate = true;
+    this.hpBarFill.count = barIdx;
+    this.hpBarFill.instanceMatrix.needsUpdate = true;
+    if (this.hpBarFill.instanceColor) this.hpBarFill.instanceColor.needsUpdate = true;
   }
 
   /** easeOutBack: 0 -> overshoot(~1.1) -> 1, for a friendly cartoon pop-in. */
@@ -828,7 +849,10 @@ export class GameRenderer {
     for (const tex of this.faceTextures) tex.dispose();
     this.shieldBubble.geometry.dispose();
     (this.shieldBubble.material as THREE.Material).dispose();
-    for (const bar of this.hpBars) this.disposeGroup(bar.group);
+    this.hpBarBg.geometry.dispose();
+    (this.hpBarBg.material as THREE.Material).dispose();
+    this.hpBarFill.geometry.dispose();
+    (this.hpBarFill.material as THREE.Material).dispose();
     this.rangeDisc.geometry.dispose();
     (this.rangeDisc.material as THREE.Material).dispose();
 

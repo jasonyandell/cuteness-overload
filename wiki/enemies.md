@@ -1,6 +1,6 @@
 ---
 tags: [sim, enemies, mechanics, scaling]
-updated: 2026-07-07
+updated: 2026-07-08
 source-files:
   - src/sim/constants.ts
   - src/sim/engine.ts
@@ -28,24 +28,30 @@ single boss on wave 20 is often the difference between a win and a loss.
 
 ## Per-wave scaling (in `spawnEnemy`)
 
-HP and shield scale with wave number and the map's `hpMul`:
+Trash (regular/fast/shield) and bosses scale on **separate curves**, and bosses
+**ignore the map's `hpMul`**:
 
 ```
-scale = map.hpMul * HP_GROWTH^(wave - 1)        // HP_GROWTH = 1.22
+growth = kind === 'boss' ? BOSS_HP_GROWTH : HP_GROWTH   // 1.16 vs 1.22
+scale  = (boss ? 1 : map.hpMul) * growth^(wave - 1)
 if wave > 20:  scale *= ENDLESS_HP_GROWTH^(wave - 20)   // 1.30 per extra wave
 hp     = spec.hp     * scale
 shield = spec.shield * scale
 ```
 
-**`HP_GROWTH = 1.22` compounds hard.** By wave 20 it is `1.22^19 ≈ 43.7×` base.
-Concrete boss HP at wave 20:
+**`HP_GROWTH = 1.22` compounds hard** for trash: by wave 20 it is
+`1.22^19 ≈ 43.7×` base (a wave-20 Bloop is ~1,140 hp on Meadow). Bosses ride the
+gentler `BOSS_HP_GROWTH = 1.16`: a wave-20 Chonk is `420 × 1.16^19 ≈ 7,100` hp —
+**two of them**, identical on every map.
 
-- Meadow (`hpMul 1.0`): `420 × 43.7 ≈ 18,400` per boss, **two of them**.
-- Double (`hpMul 1.1`): `420 × 1.1 × 43.7 ≈ 20,200` per boss.
+Why the split (both parts of the 2026-07-08 rebalance; see [[balance]]):
 
-This compounding is why the late game outruns any affordable single-target line
-and why the [[towers|Snuggle Nuke]]'s per-shot 90+splash (and its rate bump to
-0.26) is the designated boss answer. See [[balance]].
+- Trash keeps the steep curve so kill-income can't keep up and plinker-spam
+  still collapses at the late swarms.
+- The wave-20 double-Chonk wall is the game's climax save-up test; on the steep
+  curve (and multiplied by `hpMul`) it demanded more delivered damage than a
+  whole game's economy could buy. Constant across maps, map difficulty lives in
+  the trash waves instead — and an expertly-saved economy can now **ace** it.
 
 ## Bounty scaling
 

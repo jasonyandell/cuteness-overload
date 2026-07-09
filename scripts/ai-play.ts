@@ -20,7 +20,16 @@ import {
   skipWave,
   totalEnemyHp,
 } from '../src/sim/engine';
-import { TOWERS, TICK, TOTAL_WAVES, DMG_MUL, SPD_MUL, MAX_UPGRADE } from '../src/sim/constants';
+import {
+  TOWERS,
+  ENEMIES,
+  TICK,
+  TOTAL_WAVES,
+  HP_GROWTH,
+  BOSS_HP_GROWTH,
+  towerStats,
+} from '../src/sim/constants';
+import { waveComposition } from '../src/sim/waves';
 import { hexToWorld, buildPathGeom } from '../src/sim/hex';
 import type { GameState, MapDef, TowerKind, Tower } from '../src/sim/types';
 
@@ -104,21 +113,65 @@ function bestCell(
 // DPS estimate — rough single-target throughput of the whole team, used only to
 // decide when it's safe to skip a wave for the bonus.
 // ---------------------------------------------------------------------------
+/** Expected enemies hit per shot, assuming a typical linear density of mobs. */
+function targetsPerShot(kind: TowerKind, stats: ReturnType<typeof towerStats>): number {
+  const DENSITY = 0.8; // enemies per world unit along the path, mid-wave-ish
+  if (kind === 'cannon' || kind === 'doom' || kind === 'freeze') {
+    return 1 + stats.splash * 2 * DENSITY * 0.55; // splash covers a path chord
+  }
+  if (kind === 'lightning') {
+    let sum = 1;
+    let d = 1;
+    for (let i = 1; i < stats.chains; i++) {
+      d *= stats.falloff;
+      sum += d;
+    }
+    return sum;
+  }
+  return 1;
+}
+
 function towerDps(t: Tower): number {
-  const spec = TOWERS[t.kind];
-  const dmg = spec.damage * Math.pow(DMG_MUL, t.dmgLevel);
-  const rate = spec.rate * Math.pow(SPD_MUL, t.spdLevel);
-  let mult = 1;
-  // Crude effective-target multipliers so AoE/chain towers aren't undervalued.
-  if (t.kind === 'cannon' || t.kind === 'doom') mult = 2.2;
-  else if (t.kind === 'lightning') mult = (spec.chains ?? 1) * 0.7;
-  else if (t.kind === 'freeze') mult = 1.5;
-  return dmg * rate * mult;
+  const stats = towerStats(t);
+  return stats.damage * stats.rate * targetsPerShot(t.kind, stats);
+}
+
+/** Expected BOSSES hit per shot at the wave-20 wall: the two Chonks walk ~1.7
+ *  units apart, so a splash that spans that gap double-dips; chains reach the
+ *  second boss through the escort. */
+function bossTargetsPerShot(kind: TowerKind, stats: ReturnType<typeof towerStats>): number {
+  if (kind === 'cannon' || kind === 'doom') return stats.splash >= 1.7 ? 2 : 1;
+  if (kind === 'lightning') return 1 + stats.falloff * stats.falloff; // boss->escort->boss
+  if (kind === 'freeze') return 0.5; // token damage; its slow is scored elsewhere
+  return 1;
+}
+
+/** Delivered-damage value (the fairness metric): DPS x targets x time-in-range.
+ *  bossMode scores against the boss wall instead of an average mob stream. */
+function towerValue(t: Tower, bossMode = false): number {
+  const stats = towerStats(t);
+  const targets = bossMode
+    ? bossTargetsPerShot(t.kind, stats)
+    : targetsPerShot(t.kind, stats);
+  return stats.damage * stats.rate * targets * stats.range;
 }
 
 function teamDps(state: GameState): number {
   let sum = 0;
   for (const t of state.towers) sum += towerDps(t);
+  return sum;
+}
+
+/** Total scaled hp (incl. shields) the given wave will send. */
+function waveThreat(wave: number, map: MapDef): number {
+  let sum = 0;
+  for (const part of waveComposition(wave)) {
+    const spec = ENEMIES[part.kind];
+    const boss = part.kind === 'boss';
+    const growth = boss ? BOSS_HP_GROWTH : HP_GROWTH;
+    const mapMul = boss ? 1 : map.hpMul; // bosses ignore hpMul (see spawnEnemy)
+    sum += part.count * (spec.hp + spec.shield) * mapMul * Math.pow(growth, wave - 1);
+  }
   return sum;
 }
 
@@ -134,7 +187,7 @@ type Step =
 // scale into cannon -> lightning -> doom while upgrading the anchors. This is the
 // "saving" discipline — the big towers (cannon, lightning, doom) are earned in
 // order, never substituted with a pile of cheap plinkers.
-const SAVER_LIST: Step[] = [
+const SAVER_OPENING: Step[] = [
   { type: 'buy', kind: 'plinker' }, // 0 — early coverage
   { type: 'buy', kind: 'plinker' }, // 1
   { type: 'buy', kind: 'cannon' }, // 2 — first splash
@@ -147,9 +200,45 @@ const SAVER_LIST: Step[] = [
   { type: 'up', tower: 4, which: 'dmg' }, // cannon2 dmg
   { type: 'buy', kind: 'doom' }, // 7 — THE big save; the discipline payoff
   { type: 'up', tower: 7, which: 'dmg' }, // doom dmg
-  // After this the value-greedy tail (see tailUpgrade) spends everything on the
-  // best DPS-per-dollar cannon/lightning/doom or upgrade — no more cheap plinkers.
+  { type: 'up', tower: 7, which: 'spd' }, // doom spd
 ];
+
+// Second-doom extension for multi-lane maps: with the wave split across two
+// paths, one doom can't guard both lanes' bosses — buy and deepen another.
+const SECOND_DOOM: Step[] = [
+  { type: 'buy', kind: 'doom' }, // 8
+  { type: 'up', tower: 8, which: 'dmg' },
+  { type: 'up', tower: 8, which: 'spd' },
+];
+
+/** Saver endgame knobs — exported so tuning sweeps can explore them. */
+export const SAVER_CFG = {
+  bankStart: 14, // first wave whose overflow goes to the boss fund
+  dumpWave: 18,  // wave at which the fund dumps into instant upgrades
+  margin: 0,     // bank only while teamDps*18 > margin * next wave's hp (0 = always bank)
+  secondDoom: false, // multi-lane maps: buy + deepen a second doom
+  doomInDump: false, // allow the dump to buy a fresh doom (the payoff purchase)
+};
+
+/**
+ * The saver's per-map game plan (like a human reading the level before playing):
+ * - meadow: generous build space; bank late, everything into one deep kill zone.
+ * - creek: long tight switchbacks; the mid-game is safe cheap coverage, so bank
+ *   earlier and dump a wave sooner to absorb the wave-18 crunch.
+ * - double: two lanes split the team, so keep spending while threatened
+ *   (margin) and field a second doom — one per lane's boss.
+ * These settings ACE (20 lives) all maps x seeds 1-5 at current constants.
+ */
+const SAVER_PROFILES: Record<string, Partial<typeof SAVER_CFG>> = {
+  meadow: { bankStart: 14, dumpWave: 18, margin: 0, secondDoom: false },
+  creek: { bankStart: 12, dumpWave: 17, margin: 0, secondDoom: false },
+  double: { bankStart: 12, dumpWave: 17, margin: 1.6, secondDoom: true },
+};
+const SAVER_DEFAULTS = { ...SAVER_CFG };
+
+function saverList(): Step[] {
+  return SAVER_CFG.secondDoom ? [...SAVER_OPENING, ...SECOND_DOOM] : SAVER_OPENING;
+}
 
 interface Strategy {
   name: string;
@@ -164,12 +253,13 @@ interface PlayCtx {
 }
 
 function saverAct(state: GameState, map: MapDef, cov: Coverage, ctx: PlayCtx): void {
+  const list = saverList();
   // Advance through the fixed list as far as money allows this tick.
   let progressed = true;
   while (progressed) {
     progressed = false;
-    if (ctx.listIdx < SAVER_LIST.length) {
-      const stepDef = SAVER_LIST[ctx.listIdx];
+    if (ctx.listIdx < list.length) {
+      const stepDef = list[ctx.listIdx];
       if (stepDef.type === 'buy') {
         if (state.money >= TOWERS[stepDef.kind].cost) {
           const cell = bestCell(state, cov, stepDef.kind);
@@ -202,8 +292,23 @@ function saverAct(state: GameState, map: MapDef, cov: Coverage, ctx: PlayCtx): v
         }
       }
     } else {
+      // Boss fund: waves BANK_START..DUMP_WAVE-1 the saver banks its overflow,
+      // then dumps the whole fund into instant upgrades as the boss wall spawns
+      // ("will I be able to save in time?" — the fun part, played straight).
+      // Banking is threat-aware: only sit on money while the team comfortably
+      // out-guns the next wave; if the margin thins, spend now instead.
+      if (state.wave >= SAVER_CFG.bankStart && state.wave < SAVER_CFG.dumpWave) {
+        const safe =
+          SAVER_CFG.margin <= 0 ||
+          teamDps(state) * 18 > SAVER_CFG.margin * waveThreat(state.wave + 1, map);
+        if (safe) break;
+      }
       // Tail policy: best-value upgrade or new tower with pooled money.
-      progressed = tailUpgrade(state, map, cov);
+      // From the dump wave on, spend against the boss wall specifically —
+      // falling back to general value so the fund never rots unspent.
+      const bossMode = state.wave >= SAVER_CFG.dumpWave;
+      progressed = tailUpgrade(state, map, cov, bossMode);
+      if (!progressed && bossMode) progressed = tailUpgrade(state, map, cov, false);
     }
   }
 }
@@ -215,18 +320,23 @@ function saverAct(state: GameState, map: MapDef, cov: Coverage, ctx: PlayCtx): v
 // spams cheap plinkers, it maximizes value.)
 const TAIL_BUYS: TowerKind[] = ['cannon', 'lightning', 'doom'];
 
-function tailUpgrade(state: GameState, map: MapDef, cov: Coverage): boolean {
+function tailUpgrade(state: GameState, map: MapDef, cov: Coverage, bossMode = false): boolean {
   let bestVal = 0;
   let bestAction: (() => void) | null = null;
   let bestCost = Infinity;
 
-  // Upgrades on existing towers.
+  // Upgrades on existing towers — marginal delivered-damage value per dollar.
   for (const t of state.towers) {
-    const cur = towerDps(t);
+    const cur = towerValue(t, bossMode);
     for (const which of ['dmg', 'spd'] as const) {
       const c = upgradeCost(t, which);
       if (c == null || state.money < c) continue;
-      const gain = which === 'dmg' ? cur * (DMG_MUL - 1) : cur * (SPD_MUL - 1);
+      const next: Tower = {
+        ...t,
+        dmgLevel: t.dmgLevel + (which === 'dmg' ? 1 : 0),
+        spdLevel: t.spdLevel + (which === 'spd' ? 1 : 0),
+      };
+      const gain = towerValue(next, bossMode) - cur;
       const val = gain / c;
       if (val > bestVal) {
         bestVal = val;
@@ -236,8 +346,11 @@ function tailUpgrade(state: GameState, map: MapDef, cov: Coverage): boolean {
     }
   }
 
-  // New towers in the best free cell.
-  for (const kind of TAIL_BUYS) {
+  // New towers in the best free cell. In boss mode a fresh level-0 tower is
+  // usually trap value (deepen the anchors instead) — except, optionally, a
+  // second doom: the only base tower whose per-shot damage matters to bosses.
+  const buys = bossMode ? (SAVER_CFG.doomInDump ? (['doom'] as TowerKind[]) : []) : TAIL_BUYS;
+  for (const kind of buys) {
     const cost = TOWERS[kind].cost;
     if (state.money < cost) continue;
     const cell = bestCell(state, cov, kind);
@@ -249,7 +362,7 @@ function tailUpgrade(state: GameState, map: MapDef, cov: Coverage): boolean {
     const fresh: Tower = {
       id: -1, kind, q: cell.q, r: cell.r, dmgLevel: 0, spdLevel: 0, cooldown: 0, spent: cost,
     };
-    const gain = towerDps(fresh) * Math.min(1, covScore / 20);
+    const gain = towerValue(fresh) * Math.min(1, covScore / 20);
     const val = gain / cost;
     if (val > bestVal) {
       bestVal = val;
@@ -340,18 +453,22 @@ export interface PlayResult {
   time: number;
   towers: number;
   waveLog: string[];
+  loadout: string;
 }
 
 export function playGame(
   mapId: string,
   seed: number,
   strategyName: string,
-  opts: { log?: boolean; maxWave?: number } = {},
+  opts: { log?: boolean; maxWave?: number; cfg?: Partial<typeof SAVER_CFG> } = {},
 ): PlayResult {
   const map = MAPS.find((m) => m.id === mapId);
   if (!map) throw new Error('unknown map ' + mapId);
   const strat = STRATEGIES[strategyName];
   if (!strat) throw new Error('unknown strategy ' + strategyName);
+  if (strategyName === 'saver') {
+    Object.assign(SAVER_CFG, SAVER_DEFAULTS, SAVER_PROFILES[mapId], opts.cfg);
+  }
 
   const cov = precompute(map);
   const state = createGame(map, seed);
@@ -370,7 +487,20 @@ export function playGame(
       strat.act(state, map, cov, ctx); // spend the skip bonus right away
     }
 
+    // remember hp so a leak event can report how close the kill was
+    const hpBefore = new Map<number, number>();
+    for (const e of state.enemies) hpBefore.set(e.id, e.hp + e.shield);
+
     step(state, map);
+
+    for (const ev of state.events) {
+      if (ev.type === 'leak' && ev.kind === 'boss') {
+        const hp = hpBefore.get(ev.enemyId) ?? -1;
+        const line = `  !! boss leaked at w${state.wave} with ${hp.toFixed(0)} hp`;
+        waveLog.push(line);
+        if (opts.log) console.log(line);
+      }
+    }
 
     // one-line log per wave, captured just after the wave was called
     if (state.wave !== lastLoggedWave) {
@@ -411,6 +541,9 @@ export function playGame(
     time: state.time,
     towers: state.towers.length,
     waveLog,
+    loadout: state.towers
+      .map((t) => `${t.kind}[${t.dmgLevel}/${t.spdLevel}]$${t.spent}`)
+      .join(' '),
   };
 }
 
@@ -426,6 +559,7 @@ function main(): void {
       `kills=${r.kills}  leaks=${r.leaks}  towers=${r.towers}  ` +
       `time=${r.time.toFixed(0)}s  money=${r.money}`,
   );
+  console.log('LOADOUT: ' + r.loadout);
 }
 
 // Run as CLI when invoked directly (not when imported by balance.ts).
@@ -437,4 +571,3 @@ const invokedDirectly =
 if (invokedDirectly) main();
 
 void TICK;
-void MAX_UPGRADE;

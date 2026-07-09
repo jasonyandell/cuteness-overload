@@ -13,7 +13,7 @@
 import { chromium } from 'playwright';
 import { MAPS } from '../src/sim/maps';
 import { upgradeCost, totalEnemyHp } from '../src/sim/engine';
-import { TOWERS, TOTAL_WAVES, DMG_MUL, SPD_MUL } from '../src/sim/constants';
+import { TOWERS, TOTAL_WAVES, towerStats } from '../src/sim/constants';
 import { hexToWorld, buildPathGeom } from '../src/sim/hex';
 import type { GameState, MapDef, TowerKind, Tower } from '../src/sim/types';
 
@@ -97,14 +97,18 @@ function bestCell(
 // DPS estimate (ported)
 // ---------------------------------------------------------------------------
 function towerDps(t: Tower): number {
-  const spec = TOWERS[t.kind];
-  const dmg = spec.damage * Math.pow(DMG_MUL, t.dmgLevel);
-  const rate = spec.rate * Math.pow(SPD_MUL, t.spdLevel);
+  const stats = towerStats(t);
   let mult = 1;
-  if (t.kind === 'cannon' || t.kind === 'doom') mult = 2.2;
-  else if (t.kind === 'lightning') mult = (spec.chains ?? 1) * 0.7;
-  else if (t.kind === 'freeze') mult = 1.5;
-  return dmg * rate * mult;
+  if (t.kind === 'cannon' || t.kind === 'doom' || t.kind === 'freeze') {
+    mult = 1 + stats.splash * 0.9;
+  } else if (t.kind === 'lightning') {
+    let d = 1;
+    for (let i = 1; i < stats.chains; i++) {
+      d *= stats.falloff;
+      mult += d;
+    }
+  }
+  return stats.damage * stats.rate * mult;
 }
 
 function teamDps(towers: Tower[]): number {
@@ -191,7 +195,12 @@ function tailDecision(state: GameState, cov: Coverage): Decision {
     for (const which of ['dmg', 'spd'] as const) {
       const c = upgradeCost(t, which);
       if (c == null || state.money < c) continue;
-      const gain = which === 'dmg' ? cur * (DMG_MUL - 1) : cur * (SPD_MUL - 1);
+      const next: Tower = {
+        ...t,
+        dmgLevel: t.dmgLevel + (which === 'dmg' ? 1 : 0),
+        spdLevel: t.spdLevel + (which === 'spd' ? 1 : 0),
+      };
+      const gain = towerDps(next) - cur;
       const val = gain / c;
       if (val > bestVal) {
         bestVal = val;
